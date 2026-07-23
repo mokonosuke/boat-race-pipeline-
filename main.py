@@ -49,19 +49,21 @@ def scrape_shimonoseki_racelist():
           try:
             boat_num = cols[0].get_text(strip=True)
 
-            # 選手情報のテキストから改行や余分な空白を削除し、1行に綺麗に整形する
+            # 選手情報のテキストから改行や余分な空白を削除し、1行に整形する
             racer_raw = cols[2].get_text(separator=" ", strip=True)
             racer_info = re.sub(r"\s+", " ", racer_raw)
 
-            # 枠番が 1〜6 の数字である行（実際の選手データ）だけを抽出し、無関係な行を除外する
-            if boat_num.isdigit():
-              data_list.append({
-                  "日付": today_str,
-                  "場": "下関",
-                  "レース": "第1R",
-                  "枠番": f"{boat_num}号艇",
-                  "選手情報": racer_info,
-              })
+            # 1〜6号艇かつ、選手情報に必ず含まれる「/」がある有効な行だけを厳選する
+            if boat_num in ["1", "2", "3", "4", "5", "6"] and "/" in racer_info:
+              # すでに同じ枠番が追加されている場合は重複を避ける
+              if not any(d["枠番"] == f"{boat_num}号艇" for d in data_list):
+                data_list.append({
+                    "日付": today_str,
+                    "場": "下関",
+                    "レース": "第1R",
+                    "枠番": f"{boat_num}号艇",
+                    "選手情報": racer_info,
+                })
           except Exception:
             continue
 
