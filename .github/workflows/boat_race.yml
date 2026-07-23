@@ -2,8 +2,8 @@ name: ボートレース自動化
 
 on:
   schedule:
-    - cron: '0 12 * * *' # 毎日 12:00 UTC (日本時間 21:00)
-  workflow_dispatch:     # 手動実行ボタンを使えるようにする
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
 jobs:
   run-pipeline:
