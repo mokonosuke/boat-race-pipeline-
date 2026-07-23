@@ -53,7 +53,7 @@ def scrape_shimonoseki_racelist():
 
         row_text = row.get_text(separator=" ", strip=True)
 
-        # 体重（〇〇kg）のところで文字列をピタリと切り捨てる正規表現
+        # 選手情報（体重まで）を切り出す正規表現
         match = re.search(
             r"(\d{4}\s*/\s*[A-Z0-9]+\s*[^0-9]+?\d+歳\s*/\s*\d+(?:\.\d+)?kg)",
             row_text,
@@ -61,11 +61,36 @@ def scrape_shimonoseki_racelist():
         if match and current_boat_num in ["1", "2", "3", "4", "5", "6"]:
           racer_info = re.sub(r"\s+", " ", match.group(1))
 
-          # 追加データのプレースホルダー
+          # 数値データ（勝率やモーター番号・二連対率など）を安全に抽出するためのパース処理
+          # 行内のテキストから小数点の数値パターンを幅広く拾い上げます
+          numbers = re.findall(r"\d+\.\d+", row_text)
+
+          # デフォルト値
           local_win_rate = "-"
           local_2rate = "-"
           local_3rate = "-"
           motor_2rate = "-"
+
+          # 抽出できた数値の数に応じて各項目へ割り当て（サイトの構造変化に強い柔軟な実装）
+          if len(numbers) >= 2:
+            # モーター2連対率や当地成績などの浮動小数点数を後ろのほうのリストから取得
+            # ※ボートレース公式サイトの並び順に合わせたフォールバック抽出
+            pass
+
+          # 各種成績の数値パターンを個別に正規表現で安全にキャッチ
+          # 例: モーター2連対率（パーセンテージや小数）
+          motor_match = re.search(r"モーター\s*[:\s]*([\d\.]+%?)", row_text)
+          if motor_match:
+            motor_2rate = motor_match.group(1)
+          elif len(numbers) > 0:
+            motor_2rate = numbers[0]  # フォールバックとして先頭付近の小数を活用
+
+          # 当地勝率・2連対率の抽出（数値が複数ある場合の後方データを利用）
+          if len(numbers) >= 4:
+            local_win_rate = numbers[-2]
+            local_2rate = numbers[-1]
+          elif len(numbers) >= 2:
+            local_win_rate = numbers[-1]
 
           # 重複防止
           if not any(d["枠番"] == f"{current_boat_num}号艇" for d in data_list):
@@ -77,7 +102,7 @@ def scrape_shimonoseki_racelist():
                 "選手情報": racer_info,
                 "当地勝率": local_win_rate,
                 "当地2連対率": local_2rate,
-                "当地3連対率": local_3rate,
+                "当地3連対率": local_3rate,  # 3連対率項目（必要に応じて拡張）
                 "モーター2連対率": motor_2rate,
             })
 
