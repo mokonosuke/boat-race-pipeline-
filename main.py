@@ -42,30 +42,34 @@ def scrape_shimonoseki_racelist():
     data_list = []
     racer_rows = soup.select(".table1 tbody tr")
 
+    current_boat_num = "-"
     if racer_rows:
       for row in racer_rows:
         cols = row.find_all("td")
-        if len(cols) >= 3:
-          try:
-            boat_num = cols[0].get_text(strip=True)
+        row_text = row.get_text(separator=" ", strip=True)
 
-            # 選手情報のテキストから改行や余分な空白を削除し、1行に整形する
-            racer_raw = cols[2].get_text(separator=" ", strip=True)
-            racer_info = re.sub(r"\s+", " ", racer_raw)
+        # 1列目に枠番（1〜6）がある場合は現在の艇番を更新する（セル結合対策）
+        if len(cols) > 0:
+          first_col_text = cols[0].get_text(strip=True)
+          if first_col_text in ["1", "2", "3", "4", "5", "6"]:
+            current_boat_num = first_col_text
 
-            # 1〜6号艇かつ、選手情報に必ず含まれる「/」がある有効な行だけを厳選する
-            if boat_num in ["1", "2", "3", "4", "5", "6"] and "/" in racer_info:
-              # すでに同じ枠番が追加されている場合は重複を避ける
-              if not any(d["枠番"] == f"{boat_num}号艇" for d in data_list):
-                data_list.append({
-                    "日付": today_str,
-                    "場": "下関",
-                    "レース": "第1R",
-                    "枠番": f"{boat_num}号艇",
-                    "選手情報": racer_info,
-                })
-          except Exception:
-            continue
+        # 4桁の登録番号と「/」が含まれている行を正確な選手データとして抽出する
+        if re.search(r"\d{4}", row_text) and "/" in row_text:
+          racer_info = re.sub(r"\s+", " ", row_text)
+
+          if current_boat_num in ["1", "2", "3", "4", "5", "6"]:
+            # 同じ枠番が重複して追加されないようにチェック
+            if not any(
+                d["枠番"] == f"{current_boat_num}号艇" for d in data_list
+            ):
+              data_list.append({
+                  "日付": today_str,
+                  "場": "下関",
+                  "レース": "第1R",
+                  "枠番": f"{current_boat_num}号艇",
+                  "選手情報": racer_info,
+              })
 
     if not data_list:
       data_list.append({
