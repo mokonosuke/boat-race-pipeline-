@@ -61,8 +61,7 @@ def scrape_shimonoseki_racelist():
         if match and current_boat_num in ["1", "2", "3", "4", "5", "6"]:
           racer_info = re.sub(r"\s+", " ", match.group(1))
 
-          # 追加データのプレースホルダー（今後のパース精度向上のための土台）
-          # ※ 現段階では安全にデータを格納できるよう列を追加しています
+          # 追加データのプレースホルダー
           local_win_rate = "-"
           local_2rate = "-"
           local_3rate = "-"
@@ -98,9 +97,9 @@ def scrape_shimonoseki_racelist():
     df = pd.DataFrame(data_list)
     return df
 
-    except Exception as e:
-      print(f"スクレイピング解析エラー: {e}")
-      return None
+  except Exception as e:
+    print(f"スクレイピング解析エラー: {e}")
+    return None
 
 
 def save_data(df):
