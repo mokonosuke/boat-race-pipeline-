@@ -1,4 +1,3 @@
-
 import os
 import requests
 import pandas as pd
@@ -10,12 +9,11 @@ def main():
     # 1. データの保存先ディレクトリの確認・作成
     os.makedirs("data", exist_ok=True)
     
-    # 2. データ収集・処理のロジック
+    # 2. 日付の取得とデータ処理
     today_str = datetime.now().strftime("%Y-%m-%d")
     print(f"📅 本日の日付: {today_str}")
 
-    # 【メモ】ここに元のスクレイピングやデータ処理のコードが入ります
-    # 例: CSVへの保存処理
+    # ここにご自身のスクレイピング処理を記述できます
     df = pd.DataFrame({
         "date": [today_str],
         "status": ["completed"]
@@ -27,7 +25,12 @@ def main():
 
     # 3. Discord通知の送信処理（デバッグログ付き）
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    print(f"DEBUG: DISCORD_WEBHOOK_URL is {'set (Length: ' + str(len(webhook_url)) + ')' if webhook_url else 'NOT SET'}")
+    
+    # ログにURLがセットされているか（文字数）を出力（セキュリティのため中身は隠します）
+    if webhook_url:
+        print(f"DEBUG: DISCORD_WEBHOOK_URL is set (Length: {len(webhook_url)})")
+    else:
+        print("❌ DEBUG: DISCORD_WEBHOOK_URL is NOT SET")
 
     if webhook_url:
         payload = {
