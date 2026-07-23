@@ -53,8 +53,11 @@ def scrape_shimonoseki_racelist():
 
         row_text = row.get_text(separator=" ", strip=True)
 
-        # 4桁の登録番号と「/」以降の綺麗なお名前・情報部分だけを正確に抜き出す
-        match = re.search(r"(\d{4}\s*/\s*[A-Z0-9]+\s*.+)", row_text)
+        # 体重（〇〇kg）のところで文字列をピタリと切り捨てる正規表現
+        match = re.search(
+            r"(\d{4}\s*/\s*[A-Z0-9]+\s*[^0-9]+?\d+歳\s*/\s*\d+(?:\.\d+)?kg)",
+            row_text,
+        )
         if match and current_boat_num in ["1", "2", "3", "4", "5", "6"]:
           racer_info = re.sub(r"\s+", " ", match.group(1))
 
