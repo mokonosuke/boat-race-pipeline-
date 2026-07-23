@@ -2,7 +2,7 @@ name: Boat Race Automation
 
 on:
   schedule:
-    - cron: '0 8 * * *' # 毎日定期実行
+    - cron: '0 12 * * *' # 毎日定期実行
   workflow_dispatch: # 手動実行
 
 jobs:
