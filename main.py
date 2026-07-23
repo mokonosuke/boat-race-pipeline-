@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import time
 from bs4 import BeautifulSoup
 import pandas as pd
 import requests
@@ -8,22 +9,35 @@ DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 
 def scrape_shimonoseki_racelist():
+  today_ymd = datetime.now().strftime("%Y%m%d")
+  today_str = datetime.now().strftime("%Y-%m-%d")
+  jcd = "19"
+  url = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={today_ymd}"
+
+  headers = {
+      "User-Agent": (
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      )
+  }
+
+  response = None
+  # 最大3回まで接続をリトライする
+  for attempt in range(3):
+    try:
+      print(f"URLにアクセス中 (試行 {attempt + 1}/3): {url}")
+      response = requests.get(url, headers=headers, timeout=20)
+      response.raise_for_status()
+      break
+    except requests.exceptions.RequestException as e:
+      print(f"⚠️ 接続エラー (試行 {attempt + 1}/3): {e}")
+      if attempt < 2:
+        time.sleep(5)  # 5秒待ってから再試行
+      else:
+        print("❌ すべてのリトライが失敗しました。")
+        return None
+
   try:
-    today_ymd = datetime.now().strftime("%Y%m%d")
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    jcd = "19"
-    url = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={today_ymd}"
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
-
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
-
     soup = BeautifulSoup(response.text, "html.parser")
     data_list = []
     racer_rows = soup.select(".table1 tbody tr")
@@ -58,7 +72,7 @@ def scrape_shimonoseki_racelist():
     return df
 
   except Exception as e:
-    print(f"スクレイピングエラー: {e}")
+    print(f"スクレイピング解析エラー: {e}")
     return None
 
 
@@ -75,7 +89,6 @@ def save_data(df):
 
 
 def send_discord_notification(message, df_preview=None):
-  """Discordへ通知を送る関数（詳細なエラーログ出力付き）"""
   if not DISCORD_WEBHOOK_URL:
     print("⚠️ 警告: DISCORD_WEBHOOK_URL が空です。")
     return
