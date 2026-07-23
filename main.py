@@ -51,7 +51,6 @@ def scrape_race_data_with_results():
   active_venues_count = 0
 
   for jcd, venue_name in VENUE_DICT.items():
-    # 開催チェック (第1Rの出走表が存在するか)
     url_r1 = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={today_ymd}"
     try:
       res_r1 = requests.get(url_r1, headers=headers, timeout=10)
@@ -66,14 +65,10 @@ def scrape_race_data_with_results():
     active_venues_count += 1
     print(f"📍 開催検知・データ取得中: {venue_name}")
 
-    # 第1R〜第12Rまでループ
     for rno in range(1, 13):
-      # 1. 出走表（特徴量）の取得
       url_list = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno={rno}&jcd={jcd}&hd={today_ymd}"
-      # 2. レース結果（正解ラベル）の取得URL
       url_res = f"https://www.boatrace.jp/owpc/pc/race/result?rno={rno}&jcd={jcd}&hd={today_ymd}"
 
-      # 出走表の取得
       resp_list = None
       for _ in range(3):
         try:
@@ -86,33 +81,26 @@ def scrape_race_data_with_results():
       if resp_list is None:
         continue
 
-      # 結果ページの取得（レースが終了していれば結果が取れる）
-      rank_dict = {}  # 艇番ごとの着順を格納 (例: {"1": "1", "3": "2", ...})
+      rank_dict = {}
       try:
         resp_res = requests.get(url_res, headers=headers, timeout=15)
         if resp_res.status_code == 200:
           soup_res = BeautifulSoup(resp_res.text, "html.parser")
-          # 結果ページの着順テーブルを解析
           result_rows = soup_res.select(
               ".table1.is-paddingsetting-none tbody tr, .table1 tbody tr"
           )
           for row in result_rows:
-            row_text = row.get_text(separator=" ", strip=True)
-            # 結果テーブルから着順と艇番のパターンを抽出する簡易処理
             cols = row.find_all("td")
             if len(cols) >= 2:
               rank_candidate = cols[0].get_text(strip=True)
-              # 着順が数字（1〜6）の場合
               if rank_candidate in ["1", "2", "3", "4", "5", "6"]:
-                # 艇番を探す（通常、着順行の中に2文字程度の数字や艇番が含まれる）
                 boat_match = re.search(r"\b([1-6])\b", cols[1].get_text())
                 if boat_match:
                   boat_num = boat_match.group(1)
                   rank_dict[boat_num] = rank_candidate
       except Exception:
-        pass  -  # 結果がまだ出ていないレースの場合はスルー
+        pass  # 結果がまだ出ていないレースの場合はスルー
 
-      # 出走表の解析と結果の紐付け
       try:
         soup = BeautifulSoup(resp_list.text, "html.parser")
         racer_rows = soup.select(".table1 tbody tr")
@@ -151,10 +139,8 @@ def scrape_race_data_with_results():
               elif len(numbers) >= 2:
                 local_win_rate = numbers[-1]
 
-              # この艇の着順（未確定の場合は "-"）
               finish_order = rank_dict.get(current_boat_num, "-")
 
-              # 重複防止しつつ追加
               if not any(
                   d["場"] == venue_name
                   and d["レース"] == f"第{rno}R"
@@ -170,7 +156,7 @@ def scrape_race_data_with_results():
                     "当地勝率": local_win_rate,
                     "当地2連対率": local_2rate,
                     "モーター2連対率": motor_2rate,
-                    "着順": finish_order,  # ★ここに正解ラベルが格納されます！
+                    "着順": finish_order,
                 })
       except Exception as e:
         print(f"{venue_name} 第{rno}Rの解析エラー: {e}")
