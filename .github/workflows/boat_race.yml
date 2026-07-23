@@ -2,9 +2,9 @@ name: Boat Race Automation
 
 on:
   schedule:
-    # 毎日日本時間の21:00（UTC 12:00）に実行
+    # 毎日日本時間の21:00 (UTC 12:00) に実行
     - cron: '0 12 * * *'
-  workflow_dispatch: # 手動実行ボタンも有効化
+  workflow_dispatch: # 手動実行ボタンを有効化
 
 jobs:
   run-pipeline:
@@ -27,12 +27,10 @@ jobs:
       - name: Run main script
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          python main.py
+        run: python main.py
 
       - name: Commit and push updated data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto-update boat race data"
-          file_pattern: data/*.csv
-
+          commit_message: "ボートレースデータの自動更新"
+          file_pattern: "data/*.csv"
