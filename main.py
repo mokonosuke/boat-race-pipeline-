@@ -88,7 +88,7 @@ def save_data(df):
 
 
 def send_discord_notification(message, df_preview=None):
-  """Discordへテキスト形式で確実に通知を送る関数"""
+  """Discordへ文字数制限を考慮して確実に通知を送る関数"""
   if not DISCORD_WEBHOOK_URL:
     print("⚠️ 警告: DISCORD_WEBHOOK_URL が空です。")
     return
@@ -97,6 +97,9 @@ def send_discord_notification(message, df_preview=None):
 
   if df_preview is not None:
     preview_text = "```\n" + df_preview.to_string(index=False) + "\n```"
+    # Discordの2000文字制限を超えないよう、長すぎる場合は安全に切り詰める
+    if len(preview_text) > 1200:
+      preview_text = preview_text[:1200] + "\n...(以下省略)...\n```"
     text += f"\n{preview_text}"
 
   payload = {"content": text}
@@ -119,3 +122,4 @@ if __name__ == "__main__":
     print("処理が正常に完了しました。")
   else:
     print("有効なデータが取得できませんでした。")
+
