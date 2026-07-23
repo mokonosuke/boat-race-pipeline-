@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import re
 import time
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -47,14 +48,20 @@ def scrape_shimonoseki_racelist():
         if len(cols) >= 3:
           try:
             boat_num = cols[0].get_text(strip=True)
-            racer_info = cols[2].get_text(strip=True)
-            data_list.append({
-                "日付": today_str,
-                "場": "下関",
-                "レース": "第1R",
-                "枠番": boat_num,
-                "選手": racer_info,
-            })
+
+            # 選手情報のテキストから改行や余分な空白を削除し、1行に綺麗に整形する
+            racer_raw = cols[2].get_text(separator=" ", strip=True)
+            racer_info = re.sub(r"\s+", " ", racer_raw)
+
+            # 枠番が 1〜6 の数字である行（実際の選手データ）だけを抽出し、無関係な行を除外する
+            if boat_num.isdigit():
+              data_list.append({
+                  "日付": today_str,
+                  "場": "下関",
+                  "レース": "第1R",
+                  "枠番": f"{boat_num}号艇",
+                  "選手情報": racer_info,
+              })
           except Exception:
             continue
 
@@ -64,7 +71,7 @@ def scrape_shimonoseki_racelist():
           "場": "下関",
           "レース": "第1R",
           "枠番": "-",
-          "選手": "本日の出走データなし",
+          "選手情報": "本日の出走データなし",
       })
 
     df = pd.DataFrame(data_list)
@@ -88,7 +95,6 @@ def save_data(df):
 
 
 def send_discord_notification(message, df_preview=None):
-  """Discordへ文字数制限を考慮して確実に通知を送る関数"""
   if not DISCORD_WEBHOOK_URL:
     print("⚠️ 警告: DISCORD_WEBHOOK_URL が空です。")
     return
@@ -97,9 +103,8 @@ def send_discord_notification(message, df_preview=None):
 
   if df_preview is not None:
     preview_text = "```\n" + df_preview.to_string(index=False) + "\n```"
-    # Discordの2000文字制限を超えないよう、長すぎる場合は安全に切り詰める
-    if len(preview_text) > 1200:
-      preview_text = preview_text[:1200] + "\n...(以下省略)...\n```"
+    if len(preview_text) > 1900:
+      preview_text = preview_text[:1900] + "\n...(以下省略)...\n```"
     text += f"\n{preview_text}"
 
   payload = {"content": text}
@@ -122,4 +127,3 @@ if __name__ == "__main__":
     print("処理が正常に完了しました。")
   else:
     print("有効なデータが取得できませんでした。")
-
