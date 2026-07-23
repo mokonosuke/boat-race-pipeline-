@@ -22,7 +22,6 @@ def scrape_shimonoseki_racelist():
   }
 
   response = None
-  # 最大3回まで接続をリトライする
   for attempt in range(3):
     try:
       print(f"URLにアクセス中 (試行 {attempt + 1}/3): {url}")
@@ -32,7 +31,7 @@ def scrape_shimonoseki_racelist():
     except requests.exceptions.RequestException as e:
       print(f"⚠️ 接続エラー (試行 {attempt + 1}/3): {e}")
       if attempt < 2:
-        time.sleep(5)  # 5秒待ってから再試行
+        time.sleep(5)
       else:
         print("❌ すべてのリトライが失敗しました。")
         return None
@@ -89,25 +88,18 @@ def save_data(df):
 
 
 def send_discord_notification(message, df_preview=None):
+  """Discordへテキスト形式で確実に通知を送る関数"""
   if not DISCORD_WEBHOOK_URL:
     print("⚠️ 警告: DISCORD_WEBHOOK_URL が空です。")
     return
 
-  embed = {
-      "title": "🚤 【下関ボートレース出走表 取得速報】",
-      "description": message,
-      "color": 3447003,
-  }
+  text = f"🚤 **【下関ボートレース出走表 取得速報】**\n{message}"
 
   if df_preview is not None:
     preview_text = "```\n" + df_preview.to_string(index=False) + "\n```"
-    embed["fields"] = [{
-        "name": "取得データプレビュー:",
-        "value": preview_text,
-        "inline": False,
-    }]
+    text += f"\n{preview_text}"
 
-  payload = {"embeds": [embed]}
+  payload = {"content": text}
 
   try:
     response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
