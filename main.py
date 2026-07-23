@@ -42,34 +42,31 @@ def scrape_shimonoseki_racelist():
     data_list = []
     racer_rows = soup.select(".table1 tbody tr")
 
-    current_boat_num = "-"
+    current_boat_num = ""
     if racer_rows:
       for row in racer_rows:
         cols = row.find_all("td")
+        if len(cols) > 0:
+          first_col = cols[0].get_text(strip=True)
+          if first_col in ["1", "2", "3", "4", "5", "6"]:
+            current_boat_num = first_col
+
         row_text = row.get_text(separator=" ", strip=True)
 
-        # 1列目に枠番（1〜6）がある場合は現在の艇番を更新する（セル結合対策）
-        if len(cols) > 0:
-          first_col_text = cols[0].get_text(strip=True)
-          if first_col_text in ["1", "2", "3", "4", "5", "6"]:
-            current_boat_num = first_col_text
+        # 4桁の登録番号と「/」以降の綺麗なお名前・情報部分だけを正確に抜き出す
+        match = re.search(r"(\d{4}\s*/\s*[A-Z0-9]+\s*.+)", row_text)
+        if match and current_boat_num in ["1", "2", "3", "4", "5", "6"]:
+          racer_info = re.sub(r"\s+", " ", match.group(1))
 
-        # 4桁の登録番号と「/」が含まれている行を正確な選手データとして抽出する
-        if re.search(r"\d{4}", row_text) and "/" in row_text:
-          racer_info = re.sub(r"\s+", " ", row_text)
-
-          if current_boat_num in ["1", "2", "3", "4", "5", "6"]:
-            # 同じ枠番が重複して追加されないようにチェック
-            if not any(
-                d["枠番"] == f"{current_boat_num}号艇" for d in data_list
-            ):
-              data_list.append({
-                  "日付": today_str,
-                  "場": "下関",
-                  "レース": "第1R",
-                  "枠番": f"{current_boat_num}号艇",
-                  "選手情報": racer_info,
-              })
+          # 重複防止
+          if not any(d["枠番"] == f"{current_boat_num}号艇" for d in data_list):
+            data_list.append({
+                "日付": today_str,
+                "場": "下関",
+                "レース": "第1R",
+                "枠番": f"{current_boat_num}号艇",
+                "選手情報": racer_info,
+            })
 
     if not data_list:
       data_list.append({
@@ -100,18 +97,22 @@ def save_data(df):
   return file_path
 
 
-def send_discord_notification(message, df_preview=None):
+def send_discord_notification(message, df=None):
   if not DISCORD_WEBHOOK_URL:
     print("⚠️ 警告: DISCORD_WEBHOOK_URL が空です。")
     return
 
-  text = f"🚤 **【下関ボートレース出走表 取得速報】**\n{message}"
+  text = f"🚤 **【下関ボートレース出走表 取得速報】**\n{message}\n"
 
-  if df_preview is not None:
-    preview_text = "```\n" + df_preview.to_string(index=False) + "\n```"
-    if len(preview_text) > 1900:
-      preview_text = preview_text[:1900] + "\n...(以下省略)...\n```"
-    text += f"\n{preview_text}"
+  if df is not None and not df.empty and "選手情報" in df.columns:
+    text += "\n**【第1R 出走メンバー】**\n"
+    for _, row in df.iterrows():
+      boat = row["枠番"]
+      info = row["選手情報"]
+      text += f"• **{boat}**: {info}\n"
+
+  if len(text) > 1900:
+    text = text[:1900] + "\n...(以下省略)..."
 
   payload = {"content": text}
 
