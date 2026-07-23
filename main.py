@@ -61,6 +61,13 @@ def scrape_shimonoseki_racelist():
         if match and current_boat_num in ["1", "2", "3", "4", "5", "6"]:
           racer_info = re.sub(r"\s+", " ", match.group(1))
 
+          # 追加データのプレースホルダー（今後のパース精度向上のための土台）
+          # ※ 現段階では安全にデータを格納できるよう列を追加しています
+          local_win_rate = "-"
+          local_2rate = "-"
+          local_3rate = "-"
+          motor_2rate = "-"
+
           # 重複防止
           if not any(d["枠番"] == f"{current_boat_num}号艇" for d in data_list):
             data_list.append({
@@ -69,6 +76,10 @@ def scrape_shimonoseki_racelist():
                 "レース": "第1R",
                 "枠番": f"{current_boat_num}号艇",
                 "選手情報": racer_info,
+                "当地勝率": local_win_rate,
+                "当地2連対率": local_2rate,
+                "当地3連対率": local_3rate,
+                "モーター2連対率": motor_2rate,
             })
 
     if not data_list:
@@ -78,14 +89,18 @@ def scrape_shimonoseki_racelist():
           "レース": "第1R",
           "枠番": "-",
           "選手情報": "本日の出走データなし",
+          "当地勝率": "-",
+          "当地2連対率": "-",
+          "当地3連対率": "-",
+          "モーター2連対率": "-",
       })
 
     df = pd.DataFrame(data_list)
     return df
 
-  except Exception as e:
-    print(f"スクレイピング解析エラー: {e}")
-    return None
+    except Exception as e:
+      print(f"スクレイピング解析エラー: {e}")
+      return None
 
 
 def save_data(df):
