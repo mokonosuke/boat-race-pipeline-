@@ -1,23 +1,22 @@
-name: Boat Race Automation
+name: ボートレース自動化
 
 on:
   schedule:
-    # 毎日日本時間の21:00 (UTC 12:00) に実行
-    - cron: '0 12 * * *'
-  workflow_dispatch: # 手動実行ボタンを有効化
+    - cron: '0 12 * * *' # 毎日 12:00 UTC (日本時間 21:00)
+  workflow_dispatch:     # 手動実行ボタンを使えるようにする
 
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
-          cache: 'pip'
 
       - name: Install dependencies
         run: |
@@ -25,12 +24,14 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Run main script
+        run: python -u main.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: python main.py
 
       - name: Commit and push updated data
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "ボートレースデータの自動更新"
-          file_pattern: "data/*.csv"
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --staged --quiet || git commit -m "Auto-update boat race data: $(date +'%Y-%m-%d')"
+          git push
