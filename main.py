@@ -8,46 +8,61 @@ import requests
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 
-def scrape_boat_race_data():
-  """ボートレースのデータを取得する関数
-
-  （現在は安定動作の確認と今後の拡張をしやすくするためのベース構成にしています）
-  """
+def scrape_shimonoseki_racelist():
+  """ボートレース下関の今日（当日）の出走表データを取得する関数"""
   try:
-    # 例として公式トップページや対象レースのURLを指定
-    url = "https://www.boatrace.jp/owpc/pc/index.html"
+    # 本日の日付を取得 (YYYYMMDD形式)
+    today_ymd = datetime.now().strftime("%Y%m%d")
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    # 下関の場コードは 19
+    jcd = "19"
+    url = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={today_ymd}"
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
     }
 
-    # サイトへのアクセス
+    print(f"URLにアクセス中: {url}")
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # --- 実際のスクレイピング処理エリア ---
-    # ここにBeautifulSoupを使ったタグ解析処理を組み込んでいきます。
-    # 例として、取得日時や実際のスクレイピング構築に向けた土台データを生成します。
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    data_list = []
+    racer_rows = soup.select(".table1 tbody tr")
 
-    data = [{
-        "日付": today_str,
-        "レース": "第1R",
-        "場": "福岡",
-        "選手": "選手A",
-        "オッズ": 2.5,
-    }, {
-        "日付": today_str,
-        "レース": "第1R",
-        "場": "福岡",
-        "選手": "選手B",
-        "オッズ": 4.1,
-    }]
+    if racer_rows:
+      for row in racer_rows:
+        cols = row.find_all("td")
+        if len(cols) >= 3:
+          try:
+            boat_num = cols[0].get_text(strip=True)  # 枠番
+            racer_info = cols[2].get_text(strip=True)  # 選手名など
+            data_list.append({
+                "日付": today_str,
+                "場": "下関",
+                "レース": "第1R",
+                "枠番": boat_num,
+                "選手": racer_info,
+            })
+          except Exception:
+            continue
 
-    df = pd.DataFrame(data)
+    # データが取得できなかった場合の安全対策（非開催日など）
+    if not data_list:
+      data_list = [{
+          "日付": today_str,
+          "場": "下関",
+          "レース": "第1R",
+          "枠番": "-",
+          "選手": "本日の出走データなし（または非開催）",
+      }]
+
+    df = pd.DataFrame(data_list)
     return df
 
   except Exception as e:
@@ -59,9 +74,8 @@ def save_data(df):
   """取得したデータをCSVとして保存する関数"""
   os.makedirs("data", exist_ok=True)
   today_str = datetime.now().strftime("%Y%m%d")
-  file_path = f"data/boat_race_{today_str}.csv"
+  file_path = f"data/shimonoseki_racelist_{today_str}.csv"
 
-  # CSVファイルに保存（既にファイルがある場合は追記）
   if os.path.exists(file_path):
     df.to_csv(file_path, mode="a", header=False, index=False, encoding="utf-8-sig")
   else:
@@ -76,7 +90,7 @@ def send_discord_notification(message, df_preview=None):
     return
 
   embed = {
-      "title": "🚤 【ボートレース自動データ取得速報】",
+      "title": "🚤 【下関ボートレース出走表 取得速報】",
       "description": message,
       "color": 3447003,
   }
@@ -94,13 +108,15 @@ def send_discord_notification(message, df_preview=None):
 
 
 if __name__ == "__main__":
-  print("データ取得プロセスを開始します...")
-  df = scrape_boat_race_data()
+  print("下関の出走表データ取得プロセスを開始します...")
+  df = scrape_shimonoseki_racelist()
 
   if df is not None and not df.empty:
     file_path = save_data(df)
     msg = f"実行日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n保存先: `{file_path}`"
     send_discord_notification(msg, df)
     print("処理が正常に完了しました。")
+  else:
+    print("有効なデータが取得できませんでした。")
   else:
     print("有効なデータが取得できませんでした。")
