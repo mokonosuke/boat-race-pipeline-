@@ -85,17 +85,14 @@ def scrape_race_data_with_results(target_date: datetime):
       rank_dict = {}
       try:
         resp_res = requests.get(url_res, headers=headers, timeout=15)
-        print(f"🔍 [結果取得] {venue_name} R{rno} ステータス: {resp_res.status_code}")
         
         if resp_res.status_code == 200:
           soup_res = BeautifulSoup(resp_res.text, "html.parser")
-          result_rows = soup_res.select(
-              ".table1.is-paddingsetting-none tbody tr, .table1 tbody tr"
-          )
-          print(f"🔍 [結果行数] {len(result_rows)}行検知")
+          result_rows = soup_res.select("table tr")
+          print(f"🔍 [結果取得] {venue_name} R{rno} | 行数: {len(result_rows)}")
           
           for row in result_rows:
-            cols = row.find_all("td")
+            cols = row.find_all(["td", "th"])
             if len(cols) >= 2:
               rank_candidate = cols[0].get_text(strip=True)
               if rank_candidate in ["1", "2", "3", "4", "5", "6"]:
@@ -212,7 +209,7 @@ def send_discord_notification(message, total_rows=0):
 
 if __name__ == "__main__":
   start_date = datetime(2026, 5, 1)
-  end_date = datetime(2026, 5, 2)
+  end_date = datetime(2026, 5, 6)
 
   current_date = start_date
   while current_date <= end_date:
@@ -227,3 +224,4 @@ if __name__ == "__main__":
     
       current_date += timedelta(days=1)
       time.sleep(1)
+
