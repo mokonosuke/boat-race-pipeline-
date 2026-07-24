@@ -209,7 +209,7 @@ def send_discord_notification(message, total_rows=0):
 
 if __name__ == "__main__":
   start_date = datetime(2026, 5, 1)
-  end_date = datetime(2026, 5, 6)
+  end_date = datetime(2026, 5, 1)
 
   current_date = start_date
   while current_date <= end_date:
