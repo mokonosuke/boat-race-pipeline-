@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import re
 import time
@@ -36,9 +36,10 @@ VENUE_DICT = {
 }
 
 
-def scrape_race_data_with_results():
-  today_ymd = datetime.now().strftime("%Y%m%d")
-  today_str = datetime.now().strftime("%Y-%m-%d")
+def scrape_race_data_with_results(target_date: datetime):
+  """指定した日付のレースデータと結果を取得する"""
+  target_ymd = target_date.strftime("%Y%m%d")
+  target_str = target_date.strftime("%Y-%m-%d")
   data_list = []
 
   headers = {
@@ -51,7 +52,7 @@ def scrape_race_data_with_results():
   active_venues_count = 0
 
   for jcd, venue_name in VENUE_DICT.items():
-    url_r1 = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={today_ymd}"
+    url_r1 = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno=1&jcd={jcd}&hd={target_ymd}"
     try:
       res_r1 = requests.get(url_r1, headers=headers, timeout=10)
       if res_r1.status_code != 200:
@@ -63,11 +64,11 @@ def scrape_race_data_with_results():
       continue
 
     active_venues_count += 1
-    print(f"📍 開催検知・データ取得中: {venue_name}")
+    print(f"📍 [{target_str}] 開催検知・データ取得中: {venue_name}")
 
     for rno in range(1, 13):
-      url_list = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno={rno}&jcd={jcd}&hd={today_ymd}"
-      url_res = f"https://www.boatrace.jp/owpc/pc/race/result?rno={rno}&jcd={jcd}&hd={today_ymd}"
+      url_list = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno={rno}&jcd={jcd}&hd={target_ymd}"
+      url_res = f"https://www.boatrace.jp/owpc/pc/race/result?rno={rno}&jcd={jcd}&hd={target_ymd}"
 
       resp_list = None
       for _ in range(3):
@@ -99,7 +100,7 @@ def scrape_race_data_with_results():
                   boat_num = boat_match.group(1)
                   rank_dict[boat_num] = rank_candidate
       except Exception:
-        pass  # 結果がまだ出ていないレースの場合はスルー
+        pass  # 結果が出ていない場合はスルー
 
       try:
         soup = BeautifulSoup(resp_list.text, "html.parser")
@@ -148,7 +149,7 @@ def scrape_race_data_with_results():
                   for d in data_list
               ):
                 data_list.append({
-                    "日付": today_str,
+                    "日付": target_str,
                     "場": venue_name,
                     "レース": f"第{rno}R",
                     "枠番": f"{current_boat_num}号艇",
@@ -165,7 +166,7 @@ def scrape_race_data_with_results():
 
   if not data_list:
     data_list.append({
-        "日付": today_str,
+        "日付": target_str,
         "場": "-",
         "レース": "-",
         "枠番": "-",
@@ -176,14 +177,14 @@ def scrape_race_data_with_results():
         "着順": "-",
     })
 
-  print(f"本日開催の全会場数: {active_venues_count}場")
+  print(f"[{target_str}] 本日開催の全会場数: {active_venues_count}場")
   return pd.DataFrame(data_list)
 
 
-def save_data(df):
+def save_data(df, target_date: datetime):
   os.makedirs("data", exist_ok=True)
-  today_str = datetime.now().strftime("%Y%m%d")
-  file_path = f"data/all_racedata_with_result_{today_str}.csv"
+  target_str = target_date.strftime("%Y%m%d")
+  file_path = f"data/all_racedata_with_result_{target_str}.csv"
 
   if os.path.exists(file_path):
     df.to_csv(file_path, mode="a", header=False, index=False, encoding="utf-8-sig")
@@ -206,10 +207,21 @@ def send_discord_notification(message, total_rows=0):
 
 
 if __name__ == "__main__":
-  df = scrape_race_data_with_results()
-  if df is not None and not df.empty:
-    file_path = save_data(df)
-    msg = f"実行日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n保存先: `{file_path}`"
-    send_discord_notification(msg, len(df))
-    print("すべての処理が正常に完了しました。")
+  # --- 過去データを一括取得する場合の設定 ---
+  # 例: 2026年7月1日 から 2026年7月7日 までのデータを取得する場合
+  start_date = datetime(2026, 7, 1)
+  end_date = datetime(2026, 7, 7)
 
+  current_date = start_date
+  while current_date <= end_date:
+    print(f"\n=== {current_date.strftime('%Y-%m-%d')} のデータ取得開始 ===")
+    df = scrape_race_data_with_results(current_date)
+    
+    if df is not None and not df.empty:
+      file_path = save_data(df, current_date)
+      msg = f"対象日付: {current_date.strftime('%Y-%m-%d')}\n保存先: `{file_path}`"
+      send_discord_notification(msg, len(df))
+      print(f"[{current_date.strftime('%Y-%m-%d')}] 処理が完了しました。")
+    
+      current_date += timedelta(days=1)
+      time.sleep(1) # サーバー負荷軽減のためのウェイト
