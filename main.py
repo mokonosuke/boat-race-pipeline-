@@ -210,7 +210,7 @@ if __name__ == "__main__":
   # --- 過去データを一括取得する場合の設定 ---
   # 例: 2026年7月1日 から 2026年7月7日 までのデータを取得する場合
   start_date = datetime(2026, 7, 1)
-  end_date = datetime(2026, 7, 7)
+  end_date = datetime(2026, 7, 23)
 
   current_date = start_date
   while current_date <= end_date:
