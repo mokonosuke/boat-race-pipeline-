@@ -87,6 +87,11 @@ def scrape_race_data_with_results(target_date: datetime):
         resp_res = requests.get(url_res, headers=headers, timeout=15)
         
         if resp_res.status_code == 200:
+          # デバッグ用：実際にどのようなHTMLが返ってきているか確認
+          print(f"🔍 [結果HTML文字数] {venue_name} R{rno}: {len(resp_res.text)}文字")
+          if len(resp_res.text) < 500:
+            print(f"🔍 [HTML内容短縮] {resp_res.text.strip()}")
+
           soup_res = BeautifulSoup(resp_res.text, "html.parser")
           result_rows = soup_res.select("table tr")
           print(f"🔍 [結果取得] {venue_name} R{rno} | 行数: {len(result_rows)}")
@@ -209,7 +214,7 @@ def send_discord_notification(message, total_rows=0):
 
 if __name__ == "__main__":
   start_date = datetime(2026, 5, 1)
-  end_date = datetime(2026, 5, 1)
+  end_date = datetime(2026, 5, 6)
 
   current_date = start_date
   while current_date <= end_date:
@@ -224,4 +229,3 @@ if __name__ == "__main__":
     
       current_date += timedelta(days=1)
       time.sleep(1)
-
