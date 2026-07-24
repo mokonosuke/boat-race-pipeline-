@@ -85,11 +85,15 @@ def scrape_race_data_with_results(target_date: datetime):
       rank_dict = {}
       try:
         resp_res = requests.get(url_res, headers=headers, timeout=15)
+        print(f"🔍 [結果取得] {venue_name} R{rno} ステータス: {resp_res.status_code}")
+        
         if resp_res.status_code == 200:
           soup_res = BeautifulSoup(resp_res.text, "html.parser")
           result_rows = soup_res.select(
               ".table1.is-paddingsetting-none tbody tr, .table1 tbody tr"
           )
+          print(f"🔍 [結果行数] {len(result_rows)}行検知")
+          
           for row in result_rows:
             cols = row.find_all("td")
             if len(cols) >= 2:
@@ -99,8 +103,8 @@ def scrape_race_data_with_results(target_date: datetime):
                 if boat_match:
                   boat_num = boat_match.group(1)
                   rank_dict[boat_num] = rank_candidate
-      except Exception:
-        pass  # 結果が出ていない場合はスルー
+      except Exception as e:
+        print(f"⚠️ 結果の解析でエラー発生 ({venue_name} R{rno}): {e}")
 
       try:
         soup = BeautifulSoup(resp_list.text, "html.parser")
@@ -207,8 +211,6 @@ def send_discord_notification(message, total_rows=0):
 
 
 if __name__ == "__main__":
-  # --- 過去データを一括取得する場合の設定 ---
-  # 例: 2026年7月1日 から 2026年7月7日 までのデータを取得する場合
   start_date = datetime(2026, 5, 1)
   end_date = datetime(2026, 5, 6)
 
@@ -224,4 +226,4 @@ if __name__ == "__main__":
       print(f"[{current_date.strftime('%Y-%m-%d')}] 処理が完了しました。")
     
       current_date += timedelta(days=1)
-      time.sleep(1) # サーバー負荷軽減のためのウェイト
+      time.sleep(1)
