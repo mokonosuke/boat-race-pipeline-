@@ -27,21 +27,21 @@ def main():
     driver = create_httpget_driver()
     bot = PyJPBoatrace(driver=driver)
 
-    # 1. 出走表（プログラム）情報の取得
-    # ※pyjpboatraceの仕様に合わせてメソッドを調整します
-    program = bot.get_program(today, stadium_id, race_no)
+    # 1. 出走表（プログラム）情報の取得 (メソッド名を修正)
+    program = bot.get_programme(today, stadium_id, race_no)
     
     # 2. オッズ情報の取得
-    odds = bot.get_odds(today, stadium_id, race_no, n3t=True) # 3連単オッズなど
+    odds = bot.get_odds(today, stadium_id, race_no, n3t=True)
 
     print(f"出走表データ取得成功: {type(program)}")
     print(f"オッズデータ取得成功: {type(odds)}")
 
-    # 3. 現段階での確認用通知メッセージ
+    # 3. 成功時の通知メッセージ
     msg = (
-        f"【ボートレース拡張テスト】\n"
+        f"【ボートレース拡張テスト成功】\n"
         f"本日 ({today}) 平和島 第{race_no}R の出走表・オッズの取得に成功しました！\n"
-        f"ここから独自の予測ロジックや「うまみ」判定を組み込んでいきます。"
+        f"出走表型: {type(program)}\n"
+        f"オッズ型: {type(odds)}"
     )
     send_discord_notification(msg)
 
