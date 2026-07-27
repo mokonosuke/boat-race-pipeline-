@@ -10,43 +10,30 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 def send_discord_notification(message):
   if not WEBHOOK_URL:
     return
+  # Discordの文字数制限（2000文字）対策に分割または切り詰め
+  if len(message) > 1900:
+    message = message[:1900] + "\n...(以下略)"
   payload = {"content": message}
   requests.post(WEBHOOK_URL, json=payload)
 
 
 def main():
-  today = date.today()
-  stadium_id = 4  # 平和島競艇場
-  race_no = 1
-
-  print(
-      f"--- データ拡張取得開始: 平和島 第{race_no}R ({today}) ---"
-  )
+  print("--- pyjpboatrace 構造確認開始 ---")
 
   try:
     driver = create_httpget_driver()
     bot = PyJPBoatrace(driver=driver)
 
-    # 1. 出走表（プログラム）情報の取得 (メソッド名を修正)
-    program = bot.get_programme(today, stadium_id, race_no)
-    
-    # 2. オッズ情報の取得
-    odds = bot.get_odds(today, stadium_id, race_no, n3t=True)
+    # botオブジェクトが持つメソッドや属性の一覧を取得
+    methods = [m for m in dir(bot) if not m.startswith("_")]
+    methods_str = ", ".join(methods)
 
-    print(f"出走表データ取得成功: {type(program)}")
-    print(f"オッズデータ取得成功: {type(odds)}")
-
-    # 3. 成功時の通知メッセージ
-    msg = (
-        f"【ボートレース拡張テスト成功】\n"
-        f"本日 ({today}) 平和島 第{race_no}R の出走表・オッズの取得に成功しました！\n"
-        f"出走表型: {type(program)}\n"
-        f"オッズ型: {type(odds)}"
-    )
+    msg = f"【pyjpboatrace メソッド一覧】\n{methods_str}"
+    print(msg)
     send_discord_notification(msg)
 
   except Exception as e:
-    error_msg = f"【エラー】データ拡張取得失敗: {e}"
+    error_msg = f"【エラー】構造確認失敗: {e}"
     print(error_msg)
     send_discord_notification(error_msg)
 
