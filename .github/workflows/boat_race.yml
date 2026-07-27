@@ -1,18 +1,16 @@
-name: Boat Race Automation
+name: Boatrace Automation
 
 on:
   schedule:
-    - cron: '0 14 * * *' # 毎日日本時間 23:00 に定期実行
-  workflow_dispatch: # 手動実行
+    # 毎日日本時間の20:00（UTC 11:00）に定期実行
+    - cron: '0 11 * * *'
+  workflow_dispatch: # GitHubの画面から手動実行できるようにする設定
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Gitへの書き込み権限
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -22,20 +20,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pandas requests beautifulsoup4
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run main script
+      - name: Run Python script
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           python main.py
-
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.io"
-          
-          # 変更がある場合のみステージング・コミット・プッシュする
-          git add data/ || true
-          git diff --staged --quiet || git commit -m "Auto-update boat race data"
-          git push || echo "No changes to push"
