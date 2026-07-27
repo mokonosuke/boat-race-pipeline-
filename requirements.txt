@@ -1,1 +1,4 @@
+pyjpboatrace
+requests
+beautifulsoup4
 
