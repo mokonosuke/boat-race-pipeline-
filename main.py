@@ -18,7 +18,7 @@ def send_discord_notification(message):
   if response.status_code == 204:
     print("Discord通知に成功しました！")
   else:
-    print(f"Discord通知失敗: {response.status_code}")
+    print(f"Discord通知失敗: {response.status_code} - {response.text}")
 
 
 def main():
@@ -37,11 +37,12 @@ def main():
 
     # レース情報の取得
     race_info = bot.get_race_info(today, stadium_id, race_no)
+    print(f"取得データ: {race_info}")
 
+    # シンプルな通知メッセージを作成
     msg = (
         f"【ボートレース自動通知】\n"
-        f"本日 ({today}) 平和島 第{race_no}R のデータを取得しました！\n"
-        f"取得データ概要: {race_info}"
+        f"本日 ({today}) 平和島 第{race_no}R のデータを正常に取得しました！"
     )
     send_discord_notification(msg)
 
