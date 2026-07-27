@@ -1,60 +1,55 @@
-from datetime import datetime
-from bs4 import BeautifulSoup
+from datetime import date
+import os
+from pyjpboatrace import PyJPBoatrace
+from pyjpboatrace.drivers import create_httpget_driver
 import requests
 
-def test_single_race():
-    # テストする日付とレース情報（2026年5月1日 桐生 第1R）
-    target_ymd = "20260501"
-    venue_name = "桐生"
-    jcd = "01"
-    rno = 1
+# GitHub SecretsからDiscordのWebhook URLを取得
+WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
 
-    # 出走表と結果ページのURL
-    url_list = f"https://www.boatrace.jp/owpc/pc/race/racelist?rno={rno}&jcd={jcd}&hd={target_ymd}"
-    url_res = f"https://www.boatrace.jp/owpc/pc/race/result?rno={rno}&jcd={jcd}&hd={target_ymd}"
+def send_discord_notification(message):
+  if not WEBHOOK_URL:
+    print("Discord Webhook URLが設定されていません。")
+    return
 
-    print(f"--- テスト取得開始: {venue_name} 第{rno}R ({target_ymd}) ---")
+  payload = {"content": message}
+  response = requests.post(WEBHOOK_URL, json=payload)
+  if response.status_code == 204:
+    print("Discord通知に成功しました！")
+  else:
+    print(f"Discord通知失敗: {response.status_code}")
 
-    # 1. 出走表の取得テスト
-    try:
-        res_list = requests.get(url_list, headers=headers, timeout=10)
-        print(f"出走表ステータスコード: {res_list.status_code}")
-        soup_list = BeautifulSoup(res_list.text, "html.parser")
-        racer_rows = soup_list.select(".table1 tbody tr")
-        print(f"出走表の選手行数: {len(racer_rows)}行")
-    except Exception as e:
-        print(f"出走表取得エラー: {e}")
 
-    # 2. 結果ページの取得テスト
-    try:
-        res_res = requests.get(url_res, headers=headers, timeout=10)
-        print(f"結果ページステータスコード: {res_res.status_code}")
-        print(f"結果ページHTML文字数: {len(res_res.text)}文字")
-        
-        # HTMLが短すぎる場合は中身を表示
-        if len(res_res.text) < 1000:
-            print(f"【HTML中身】\n{res_res.text}")
-        else:
-            soup_res = BeautifulSoup(res_res.text, "html.parser")
-            # すべてのテーブル行をチェック
-            result_rows = soup_res.select("table tr")
-            print(f"結果ページ table tr 行数: {len(result_rows)}行")
-            
-            # 見つかった行の内容をいくつか表示
-            for i, row in enumerate(result_rows[:10]):
-                text = row.get_text(separator=" ", strip=True)
-                print(f"  [行 {i+1}] {text}")
+def main():
+  today = date.today()
+  stadium_id = 4  # 平和島競艇場
+  race_no = 1
 
-    except Exception as e:
-        print(f"結果取得エラー: {e}")
+  print(
+      f"--- pyjpboatrace データ取得開始: 平和島 第{race_no}R ({today}) ---"
+  )
+
+  try:
+    # GitHub Actions向けの軽量HTTPドライバを使用
+    driver = create_httpget_driver()
+    bot = PyJPBoatrace(driver=driver)
+
+    # レース情報の取得
+    race_info = bot.get_race_info(today, stadium_id, race_no)
+
+    msg = (
+        f"【ボートレース自動通知】\n"
+        f"本日 ({today}) 平和島 第{race_no}R のデータを取得しました！\n"
+        f"取得データ概要: {race_info}"
+    )
+    send_discord_notification(msg)
+
+  except Exception as e:
+    error_msg = f"【エラー】pyjpboatrace データ取得失敗: {e}"
+    print(error_msg)
+    send_discord_notification(error_msg)
+
 
 if __name__ == "__main__":
-    test_single_race()
-
+  main()
