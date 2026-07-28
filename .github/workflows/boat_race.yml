@@ -1,13 +1,12 @@
-name: Boatrace Automation
+name: Boat Race Backtest Pipeline
 
 on:
-  schedule:
-    # 毎日日本時間の20:00（UTC 11:00）に定期実行
-    - cron: '0 11 * * *'
-  workflow_dispatch: # GitHubの画面から手動実行できるようにする設定
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '0 8 * * *'
 
 jobs:
-  run-script:
+  run-backtest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -17,14 +16,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Run Python script
+        run: python backtest.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          python main.py
