@@ -2,10 +2,9 @@ from datetime import date
 from pyjpboatrace import PyJPBoatrace
 
 # -----------------------------------------
-# 1. 設定（検証したい過去のびわこ開催日を指定）
+# 1. 設定
 # -----------------------------------------
 TARGET_JCD = 11  # びわこ競走場
-# 過去に開催されたびわこSGなどの具体的な日付をリストで指定
 TEST_DATES = [
     date(2025, 7, 28),
     date(2025, 7, 29),
@@ -136,4 +135,3 @@ if __name__ == "__main__":
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
     print(f"回収率: {rec_rate:.2f}%")
-
