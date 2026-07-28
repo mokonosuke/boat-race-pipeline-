@@ -25,30 +25,24 @@ def main():
     driver = create_httpget_driver()
     bot = PyJPBoatrace(driver=driver)
 
-    # データの取得
     race_info = bot.get_race_info(today, stadium_id, race_no)
     trifecta_odds = bot.get_odds_trifecta(today, stadium_id, race_no)
 
-    # 辞書のキー（項目名）を取り出す
-    race_keys = (
-        list(race_info.keys()) if isinstance(race_info, dict) else "Not dict"
-    )
-    odds_keys = (
-        list(trifecta_odds.keys())
-        if isinstance(trifecta_odds, dict)
-        else "Not dict"
-    )
+    # 1号艇のデータ構造と、代表的な3連単オッズ（例：1-2-3）の値を取得
+    boat1_data = race_info.get("boat1", {})
+    odds_123 = trifecta_odds.get("1-2-3", "N/A")
 
     msg = (
-        f"【データ構造（キー）の確認】\n"
-        f"🔹 race_info のキー:\n{race_keys}\n\n"
-        f"🔹 trifecta_odds のキー:\n{odds_keys}"
+        f"【詳細データ・オッズの確認】\n"
+        f"🔹 1号艇データのキー:\n{list(boat1_data.keys()) if isinstance(boat1_data, dict) else boat1_data}\n\n"
+        f"🔹 1号艇データの中身:\n{boat1_data}\n\n"
+        f"🔹 3連単 '1-2-3' のオッズ: {odds_123}"
     )
     print(msg)
     send_discord_notification(msg)
 
   except Exception as e:
-    error_msg = f"【エラー】データ構造確認失敗: {e}"
+    error_msg = f"【エラー】詳細確認失敗: {e}"
     print(error_msg)
     send_discord_notification(error_msg)
 
