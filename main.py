@@ -10,7 +10,6 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 def send_discord_notification(message):
   if not WEBHOOK_URL:
     return
-  # Discordの文字数制限（2000文字）対策に分割または切り詰め
   if len(message) > 1900:
     message = message[:1900] + "\n...(以下略)"
   payload = {"content": message}
@@ -18,22 +17,36 @@ def send_discord_notification(message):
 
 
 def main():
-  print("--- pyjpboatrace 構造確認開始 ---")
+  today = date.today()
+  stadium_id = 4  # 平和島競艇場
+  race_no = 1
+
+  print(f"--- データ拡張取得開始: 平和島 第{race_no}R ({today}) ---")
 
   try:
     driver = create_httpget_driver()
     bot = PyJPBoatrace(driver=driver)
 
-    # botオブジェクトが持つメソッドや属性の一覧を取得
-    methods = [m for m in dir(bot) if not m.startswith("_")]
-    methods_str = ", ".join(methods)
+    # 1. レース情報（出走表など）の取得
+    race_info = bot.get_race_info(today, stadium_id, race_no)
+    
+    # 2. 3連単オッズの取得
+    trifecta_odds = bot.get_odds_trifecta(today, stadium_id, race_no)
 
-    msg = f"【pyjpboatrace メソッド一覧】\n{methods_str}"
-    print(msg)
+    print(f"レース情報取得成功: {type(race_info)}")
+    print(f"3連単オッズ取得成功: {type(trifecta_odds)}")
+
+    # 3. 成功時の通知
+    msg = (
+        f"【ボートレース拡張テスト成功】\n"
+        f"本日 ({today}) 平和島 第{race_no}R のデータを取得しました！\n"
+        f"- レース情報: {type(race_info)}\n"
+        f"- 3連単オッズ: {type(trifecta_odds)}"
+    )
     send_discord_notification(msg)
 
   except Exception as e:
-    error_msg = f"【エラー】構造確認失敗: {e}"
+    error_msg = f"【エラー】データ拡張取得失敗: {e}"
     print(error_msg)
     send_discord_notification(error_msg)
 
