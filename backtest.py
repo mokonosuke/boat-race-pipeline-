@@ -55,11 +55,14 @@ def run_backtest(weights):
     for target_date in TEST_DATES:
         for rno in range(1, 13):
             try:
-                odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-                race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
-                result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
+                # pyjpboatrace の仕様に合わせたメソッド呼び出し
+                odds_info = boatrace.get_odds(d=target_date, jcd=TARGET_JCD, rno=rno, type_='3連単')
+                race_info = boatrace.get_program(d=target_date, jcd=TARGET_JCD, rno=rno)
+                result_info = boatrace.get_result(d=target_date, jcd=TARGET_JCD, rno=rno)
             except Exception as e:
-                print(f"スキップ ({target_date} R{rno}): {e}")
+                continue
+            
+            if not odds_info or not race_info:
                 continue
             
             scored_bets = []
@@ -107,8 +110,8 @@ def run_backtest(weights):
                 total_investment += 100  
                 total_bets_count += 1
                 
-                winning_combo = result_info.get('combo', '')
-                payout = float(result_info.get('payout', 0)) 
+                winning_combo = result_info.get('combo', '') if result_info else ''
+                payout = float(result_info.get('payout', 0)) if result_info else 0
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
@@ -136,4 +139,3 @@ if __name__ == "__main__":
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
     print(f"回収率: {rec_rate:.2f}%")
-
