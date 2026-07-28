@@ -3,13 +3,13 @@ import traceback
 from pyjpboatrace import PyJPBoatrace
 
 # -----------------------------------------
-# 1. 設定
+# 1. 設定（確実にレースデータが存在する過去の開催日候補）
 # -----------------------------------------
 TARGET_JCD = 11  # びわこ競走場
 TEST_DATES = [
-    date(2025, 7, 28),
-    date(2025, 7, 29),
-    date(2025, 7, 30),
+    date(2024, 5, 1),
+    date(2024, 5, 2),
+    date(2024, 5, 3),
 ]
 
 # -----------------------------------------
@@ -59,9 +59,11 @@ def run_backtest(weights):
                 odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-            except Exception as e:
-                print(f"詳細エラー ({target_date} R{rno}):")
-                traceback.print_exc()
+            except Exception:
+                # 開催がない日やデータ欠損は静かにスキップ
+                continue
+            
+            if not odds_info or not race_info:
                 continue
             
             scored_bets = []
@@ -109,8 +111,8 @@ def run_backtest(weights):
                 total_investment += 100  
                 total_bets_count += 1
                 
-                winning_combo = result_info.get('combo', '')
-                payout = float(result_info.get('payout', 0)) 
+                winning_combo = result_info.get('combo', '') if result_info else ''
+                payout = float(result_info.get('payout', 0)) if result_info else 0
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
