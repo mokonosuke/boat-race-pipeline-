@@ -55,15 +55,13 @@ def run_backtest(weights):
     for target_date in TEST_DATES:
         for rno in range(1, 13):
             try:
-                odds_info = boatrace.get_odds(d=target_date, jcd=TARGET_JCD, rno=rno, type_='3連単')
-                race_info = boatrace.get_program(d=target_date, jcd=TARGET_JCD, rno=rno)
-                result_info = boatrace.get_result(d=target_date, jcd=TARGET_JCD, rno=rno)
+                odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
+                race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
+                result_info = boatrace.get_result(d=target_date, stadium=TARGET_JCD, race=rno)
             except Exception as e:
-                print(f"スキップ ({target_date} R{rno}): {e}")
                 continue
             
             if not odds_info or not race_info:
-                print(f"データなし ({target_date} R{rno})")
                 continue
             
             scored_bets = []
