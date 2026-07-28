@@ -58,7 +58,8 @@ def run_backtest(weights):
                 odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-            except Exception:
+            except Exception as e:
+                print(f"スキップ ({target_date} R{rno}): {e}")
                 continue
             
             scored_bets = []
@@ -135,3 +136,4 @@ if __name__ == "__main__":
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
     print(f"回収率: {rec_rate:.2f}%")
+
