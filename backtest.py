@@ -57,7 +57,8 @@ def run_backtest(weights):
             try:
                 odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
-                result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
+                # get_result_trifecta ではなく get_result を使用
+                result_info = boatrace.get_result(d=target_date, stadium=TARGET_JCD, race=rno)
             except Exception as e:
                 print(f"スキップ ({target_date} R{rno}): {e}")
                 continue
