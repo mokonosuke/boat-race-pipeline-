@@ -1,43 +1,52 @@
-# -----------------------------------------
-# 3. メイン処理（全12レースループ）
-# -----------------------------------------
+from pyjpboatrace import PyJPBoatrace
+from datetime import datetime
+import os
+import requests
+
+DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL')
+TARGET_JCD = 11  # びわこ
+TARGET_DATE = datetime.now().strftime('%Y-%m-%d')
+
+def get_factor_score(racer_data, boat_num):
+    # pyjpboatraceから取得できる実際のキー名に合わせて調整
+    local_3ren = float(racer_data.get('local_win_rate_3', 0.0))
+    ave_st = float(racer_data.get('ave_st', 0.20))
+    
+    course_record_score = 50.0 
+    kimarite_score = 50.0
+
+    return local_3ren, ave_st, course_record_score, kimarite_score
+
+def calculate_score(odds, avg_local_3ren, avg_st, avg_course, avg_kimarite):
+    score = avg_local_3ren * 0.8 
+    score += (0.18 - ave_st) * 200 
+    score += float(odds) * 0.3
+    score += (avg_course + avg_kimarite) * 0.1
+    return score
+
 def main():
-    # boatrace = PyJPBoatrace() # インスタンス化
+    boatrace = PyJPBoatrace() # ライブラリのインスタンス化
     
     report_message = f"🏆 **【びわこSG 全レース うまみ＆適性スコア分析】**\n({TARGET_DATE})\n\n"
 
     for rno in range(1, 13):
         try:
-            # 実際のAPI / ライブラリから各レースのデータを取得
-            # odds_info = boatrace.get_odds_trifecta(d=TARGET_DATE, jcd=TARGET_JCD, rno=rno)
-            # race_info = boatrace.get_program(d=TARGET_DATE, jcd=TARGET_JCD, rno=rno)
+            # 実際のAPI / ライブラリから各レースのオッズと出走表を取得
+            odds_info = boatrace.get_odds_trifecta(d=TARGET_DATE, jcd=TARGET_JCD, rno=rno)
+            race_info = boatrace.get_program(d=TARGET_DATE, jcd=TARGET_JCD, rno=rno)
             
-            # --- テスト用データ（API連携時は上記コメントアウトを解除してください） ---
-            odds_info = {'1-2-3': 17.1, '2-1-3': 32.8, '1-4-5': 45.0, '3-1-2': 29.9}
-            race_info = {
-                'racers': [
-                    {'local_win_rate_3': 45.2, 'ave_st': 0.14},
-                    {'local_win_rate_3': 32.1, 'ave_st': 0.16},
-                    {'local_win_rate_3': 50.4, 'ave_st': 0.12},
-                    {'local_win_rate_3': 28.0, 'ave_st': 0.18},
-                    {'local_win_rate_3': 35.5, 'ave_st': 0.15},
-                    {'local_win_rate_3': 20.0, 'ave_st': 0.19},
-                ]
-            }
-            # ------------------------------------------------------------------
-
         except Exception as e:
             print(f"第{rno}Rのデータ取得に失敗しました: {e}")
             continue
         
         scored_bets = []
         
+        # 取得したオッズ辞書をループ（構造に合わせてキー・値を取り出す）
         for combo, odds in odds_info.items():
             if not (15.0 <= odds <= 35.0):
                 continue
             
             boats = [int(b) for b in combo.split('-')]
-            
             total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
             
             for b in boats:
@@ -72,12 +81,9 @@ def main():
         else:
             report_message += "対象の買い目なし\n"
 
-    # -----------------------------------------
-    # 4. Discordへ通知（Webhook）
-    # -----------------------------------------
     print(report_message)
 
-    if DISCORD_WEBHOOK_URL and DISCORD_WEBHOOK_URL != 'ここに直接URLを貼ることも可能':
+    if DISCORD_WEBHOOK_URL:
         headers = {'Content-Type': 'application/json'}
         payload = {"content": report_message}
         try:
@@ -86,5 +92,6 @@ def main():
             print("Discordへの通知が完了しました。")
         except requests.exceptions.RequestException as e:
             print(f"Discordへの送信に失敗しました: {e}")
-    else:
-        print("Webhook URLが設定されていないため、通知はスキップされました。")
+
+if __name__ == "__main__":
+    main()
