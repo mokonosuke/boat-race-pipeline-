@@ -23,15 +23,13 @@ def get_factor_score(boat_data, assigned_course):
     ave_st = float(boat_data.get('aveST', 0.20))
     
     # 【本格実装】枠番実績（例: そのコースでの1着率や2連対率データを取得、ない場合はデフォルト値）
-    # pyjpboatrace等のデータ構造に合わせてキー名を調整可能です（例: course_2nd_rate等）
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0)) # デフォルト30%
     
     # 【本格実装】決まり手傾向（例: まくり・差し・逃げの得意度を評価）
-    # 艇番や選手タイプに応じた決まり手スコア
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
-        kimarite_score = 45.0  アートな外枠まくり加点
+        kimarite_score = 45.0  # アートな外枠まくり加点
     elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
         kimarite_score = 45.0  # 差し巧者加点
     elif kimarite_type == 'nige' and assigned_course == 1:
@@ -150,3 +148,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
