@@ -21,32 +21,34 @@ def main():
   stadium_id = 4  # 平和島競艇場
   race_no = 1
 
-  print(f"--- データ拡張取得開始: 平和島 第{race_no}R ({today}) ---")
-
   try:
     driver = create_httpget_driver()
     bot = PyJPBoatrace(driver=driver)
 
-    # 1. レース情報（出走表など）の取得
+    # データの取得
     race_info = bot.get_race_info(today, stadium_id, race_no)
-    
-    # 2. 3連単オッズの取得
     trifecta_odds = bot.get_odds_trifecta(today, stadium_id, race_no)
 
-    print(f"レース情報取得成功: {type(race_info)}")
-    print(f"3連単オッズ取得成功: {type(trifecta_odds)}")
-
-    # 3. 成功時の通知
-    msg = (
-        f"【ボートレース拡張テスト成功】\n"
-        f"本日 ({today}) 平和島 第{race_no}R のデータを取得しました！\n"
-        f"- レース情報: {type(race_info)}\n"
-        f"- 3連単オッズ: {type(trifecta_odds)}"
+    # 辞書のキー（項目名）を取り出す
+    race_keys = (
+        list(race_info.keys()) if isinstance(race_info, dict) else "Not dict"
     )
+    odds_keys = (
+        list(trifecta_odds.keys())
+        if isinstance(trifecta_odds, dict)
+        else "Not dict"
+    )
+
+    msg = (
+        f"【データ構造（キー）の確認】\n"
+        f"🔹 race_info のキー:\n{race_keys}\n\n"
+        f"🔹 trifecta_odds のキー:\n{odds_keys}"
+    )
+    print(msg)
     send_discord_notification(msg)
 
   except Exception as e:
-    error_msg = f"【エラー】データ拡張取得失敗: {e}"
+    error_msg = f"【エラー】データ構造確認失敗: {e}"
     print(error_msg)
     send_discord_notification(error_msg)
 
