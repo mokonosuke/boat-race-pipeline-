@@ -1,9 +1,8 @@
 from datetime import date
-import traceback
 from pyjpboatrace import PyJPBoatrace
 
 # -----------------------------------------
-# 1. 設定（確実にレースデータが存在する過去の開催日候補）
+# 1. 設定
 # -----------------------------------------
 TARGET_JCD = 11  # びわこ競走場
 TEST_DATES = [
@@ -59,11 +58,12 @@ def run_backtest(weights):
                 odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-            except Exception:
-                # 開催がない日やデータ欠損は静かにスキップ
+            except Exception as e:
+                print(f"スキップ ({target_date} R{rno}): {e}")
                 continue
             
             if not odds_info or not race_info:
+                print(f"データなし ({target_date} R{rno})")
                 continue
             
             scored_bets = []
