@@ -61,3 +61,38 @@ def main():
 
 if __name__ == "__main__":
   main()
+# 例：各艇の当地3連対率をチェックしてフィルタリング・スコアリングに活用するロジック
+
+def evaluate_with_local_rate(race_info, trifecta_odds_list):
+  # 例として、各艇の当地3連対率を保持する辞書（実際のプログラムデータから取得）
+  # boat_local_3ren = {1: 45.2, 2: 32.1, 3: 50.4, 4: 28.0, 5: 35.5, 6: 20.0}
+
+  recommended_bets = []
+
+  for bet in trifecta_odds_list:
+    combination = bet['combination']  # 例: '1-2-3'
+    odds = bet['odds']
+
+    # 1. オッズのうまみ判定（15.0〜35.0倍）
+    if not (15.0 <= odds <= 35.0):
+      continue
+
+    # 2. 買い目を構成する艇番を分解（例: '1-2-3' -> 1, 2, 3）
+    boat_nums = [int(x) for x in combination.split('-')]
+
+    # 3. 当地3連対率に基づく条件判定
+    # 例：買い目に含まれる選手の「当地3連対率の平均」が一定以上、
+    # または「軸となる選手（1着 or 2着）の当地3連対率が40%以上」などの条件を設定
+    
+    # 簡易的な例として、絡む選手全員の当地3連対率の平均を計算
+    avg_local_3ren = sum(boat_local_3ren[b] for b in boat_nums) / 3
+
+    # 例：平均当地3連対率が 38.0% 以上のレース・買い目のみ採用する
+    if avg_local_3ren >= 38.0:
+      recommended_bets.append({
+          'combination': combination,
+          'odds': odds,
+          'avg_local_3ren': avg_local_3ren
+      })
+
+  return recommended_bets
