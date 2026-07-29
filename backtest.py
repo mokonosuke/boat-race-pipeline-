@@ -109,11 +109,12 @@ def run_backtest(weights):
                 total_investment += 100  
                 total_bets_count += 1
                 
-                # result_info から安全に3連単の結果と払戻金を取得
+                # デバッグ用に取得データをログ出力
+                print(f"DEBUG [{target_date} R{rno}] top_bet: {top_bet['combo']}, result_info: {result_info}")
+                
                 winning_combo = ""
                 payout = 0.0
                 if isinstance(result_info, dict):
-                    # 3連単の組み合わせと払戻金のキーを柔軟に取得
                     winning_combo = result_info.get('trifecta', result_info.get('combo', ''))
                     payout_val = result_info.get('trifecta_payout', result_info.get('payout', 0))
                     try:
