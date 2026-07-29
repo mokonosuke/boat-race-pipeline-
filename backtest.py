@@ -122,6 +122,9 @@ def run_backtest(weights):
                             except (ValueError, TypeError):
                                 payout = 0.0
                 
+                # フォーマット確認用のデバッグ出力
+                print(f"DEBUG [{target_date} R{rno}] 予想買い目: {top_bet['combo']} | 結果着順: {winning_combo} | 払戻金: {payout}")
+                
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
                     total_return += payout
@@ -148,4 +151,3 @@ if __name__ == "__main__":
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
     print(f"回収率: {rec_rate:.2f}%")
-
