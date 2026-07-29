@@ -111,18 +111,27 @@ def run_backtest(weights):
                 
                 winning_combo = ""
                 payout = 0.0
+                
                 if isinstance(result_info, dict):
                     payout_dict = result_info.get('payout', {})
                     if isinstance(payout_dict, dict):
-                        trifecta_res = payout_dict.get('trifecta', {})
+                        trifecta_data = payout_dict.get('trifecta', {})
+                        
+                        # リスト形式か辞書形式かに応じて安全に抽出
+                        trifecta_res = {}
+                        if isinstance(trifecta_data, list) and len(trifecta_data) > 0:
+                            trifecta_res = trifecta_data[0]
+                        elif isinstance(trifecta_data, dict):
+                            trifecta_res = trifecta_data
+                            
                         if isinstance(trifecta_res, dict):
-                            winning_combo = trifecta_res.get('result', '')
+                            winning_combo = str(trifecta_res.get('result', ''))
                             try:
                                 payout = float(trifecta_res.get('payoff', 0))
                             except (ValueError, TypeError):
                                 payout = 0.0
                 
-                # フォーマット確認用のデバッグ出力
+                # デバッグ出力で正しく取得できているか確認
                 print(f"DEBUG [{target_date} R{rno}] 予想買い目: {top_bet['combo']} | 結果着順: {winning_combo} | 払戻金: {payout}")
                 
                 if top_bet['combo'] == winning_combo:
