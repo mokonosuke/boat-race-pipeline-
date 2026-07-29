@@ -112,27 +112,29 @@ def run_backtest(weights):
                 winning_combo = ""
                 payout = 0.0
                 
+                # 堅牢なデータパース処理
                 if isinstance(result_info, dict):
-                    payout_dict = result_info.get('payout', {})
+                    payout_dict = result_info.get('payout')
                     if isinstance(payout_dict, dict):
-                        trifecta_data = payout_dict.get('trifecta', {})
+                        trifecta_data = payout_dict.get('trifecta')
                         
-                        # リスト形式か辞書形式かに応じて安全に抽出
-                        trifecta_res = {}
                         if isinstance(trifecta_data, list) and len(trifecta_data) > 0:
-                            trifecta_res = trifecta_data[0]
+                            item = trifecta_data[0]
+                            if isinstance(item, dict):
+                                winning_combo = str(item.get('result', ''))
+                                try:
+                                    payout = float(item.get('payoff', 0))
+                                except (ValueError, TypeError):
+                                    payout = 0.0
                         elif isinstance(trifecta_data, dict):
-                            trifecta_res = trifecta_data
-                            
-                        if isinstance(trifecta_res, dict):
-                            winning_combo = str(trifecta_res.get('result', ''))
+                            winning_combo = str(trifecta_data.get('result', ''))
                             try:
-                                payout = float(trifecta_res.get('payoff', 0))
+                                payout = float(trifecta_data.get('payoff', 0))
                             except (ValueError, TypeError):
                                 payout = 0.0
                 
-                # デバッグ出力で正しく取得できているか確認
-                print(f"DEBUG [{target_date} R{rno}] 予想買い目: {top_bet['combo']} | 結果着順: {winning_combo} | 払戻金: {payout}")
+                # デバッグ出力（取得状況を明確化）
+                print(f"DEBUG [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: '{winning_combo}' | 払戻: {payout} | payout_dict存在: {isinstance(result_info.get('payout'), dict) if isinstance(result_info, dict) else False}")
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
