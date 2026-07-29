@@ -47,10 +47,6 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
 def run_backtest(weights):
     boatrace = PyJPBoatrace()
     
-    # 利用可能なメソッド一覧を一度だけログに出力して確認
-    available_methods = [m for m in dir(boatrace) if not m.startswith('_')]
-    print(f"利用可能なPyJPBoatraceメソッド: {available_methods}")
-    
     total_investment = 0  
     total_return = 0      
     hit_count = 0         
@@ -61,8 +57,8 @@ def run_backtest(weights):
             try:
                 odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
+                result_info = boatrace.get_race_result(d=target_date, stadium=TARGET_JCD, race=rno)
             except Exception as e:
-                print(f"スキップ ({target_date} R{rno}): {e}")
                 continue
             
             if not odds_info or not race_info:
@@ -113,9 +109,17 @@ def run_backtest(weights):
                 total_investment += 100  
                 total_bets_count += 1
                 
-                # 結果取得部分はメソッド判明後に正しく実装するため、一旦ダミー処理
-                winning_combo = ''
+                # result_info から安全に3連単の結果と払戻金を取得
+                winning_combo = ""
                 payout = 0.0
+                if isinstance(result_info, dict):
+                    # 3連単の組み合わせと払戻金のキーを柔軟に取得
+                    winning_combo = result_info.get('trifecta', result_info.get('combo', ''))
+                    payout_val = result_info.get('trifecta_payout', result_info.get('payout', 0))
+                    try:
+                        payout = float(payout_val)
+                    except (ValueError, TypeError):
+                        payout = 0.0
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
