@@ -109,18 +109,18 @@ def run_backtest(weights):
                 total_investment += 100  
                 total_bets_count += 1
                 
-                # デバッグ用に取得データをログ出力
-                print(f"DEBUG [{target_date} R{rno}] top_bet: {top_bet['combo']}, result_info: {result_info}")
-                
                 winning_combo = ""
                 payout = 0.0
                 if isinstance(result_info, dict):
-                    winning_combo = result_info.get('trifecta', result_info.get('combo', ''))
-                    payout_val = result_info.get('trifecta_payout', result_info.get('payout', 0))
-                    try:
-                        payout = float(payout_val)
-                    except (ValueError, TypeError):
-                        payout = 0.0
+                    payout_dict = result_info.get('payout', {})
+                    if isinstance(payout_dict, dict):
+                        trifecta_res = payout_dict.get('trifecta', {})
+                        if isinstance(trifecta_res, dict):
+                            winning_combo = trifecta_res.get('result', '')
+                            try:
+                                payout = float(trifecta_res.get('payoff', 0))
+                            except (ValueError, TypeError):
+                                payout = 0.0
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
@@ -148,3 +148,4 @@ if __name__ == "__main__":
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
     print(f"回収率: {rec_rate:.2f}%")
+
