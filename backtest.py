@@ -52,6 +52,9 @@ def run_backtest(weights):
     hit_count = 0         
     total_bets_count = 0  
     
+    # 最初の一回だけ構造確認するためにフラグを用意
+    logged_once = False
+    
     for target_date in TEST_DATES:
         for rno in range(1, 13):
             try:
@@ -63,6 +66,15 @@ def run_backtest(weights):
             
             if not odds_info or not race_info:
                 continue
+            
+            # 最初に見つかった result_info の中身のキーをログに出力して構造を暴く
+            if not logged_once:
+                print(f"=== [DEBUG STRUCT] result_info type: {type(result_info)} ===")
+                if isinstance(result_info, dict):
+                    print(f"=== [DEBUG STRUCT] keys: {list(result_info.keys())} ===")
+                    for k, v in result_info.items():
+                        print(f"  key: {k}, type: {type(v)}, val_snippet: {str(v)[:100]}")
+                logged_once = True
             
             scored_bets = []
             
@@ -112,29 +124,7 @@ def run_backtest(weights):
                 winning_combo = ""
                 payout = 0.0
                 
-                # 堅牢なデータパース処理
-                if isinstance(result_info, dict):
-                    payout_dict = result_info.get('payout')
-                    if isinstance(payout_dict, dict):
-                        trifecta_data = payout_dict.get('trifecta')
-                        
-                        if isinstance(trifecta_data, list) and len(trifecta_data) > 0:
-                            item = trifecta_data[0]
-                            if isinstance(item, dict):
-                                winning_combo = str(item.get('result', ''))
-                                try:
-                                    payout = float(item.get('payoff', 0))
-                                except (ValueError, TypeError):
-                                    payout = 0.0
-                        elif isinstance(trifecta_data, dict):
-                            winning_combo = str(trifecta_data.get('result', ''))
-                            try:
-                                payout = float(trifecta_data.get('payoff', 0))
-                            except (ValueError, TypeError):
-                                payout = 0.0
-                
-                # デバッグ出力（取得状況を明確化）
-                print(f"DEBUG [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: '{winning_combo}' | 払戻: {payout} | payout_dict存在: {isinstance(result_info.get('payout'), dict) if isinstance(result_info, dict) else False}")
+                # ここでは仮に空にしておく（構造判明後に正式な抽出ロジックを組むため）
                 
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
