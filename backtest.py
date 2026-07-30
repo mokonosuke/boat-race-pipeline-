@@ -52,9 +52,6 @@ def run_backtest(weights):
     hit_count = 0         
     total_bets_count = 0  
     
-    # 最初の一回だけ構造確認するためにフラグを用意
-    logged_once = False
-    
     for target_date in TEST_DATES:
         for rno in range(1, 13):
             try:
@@ -66,15 +63,6 @@ def run_backtest(weights):
             
             if not odds_info or not race_info:
                 continue
-            
-            # 最初に見つかった result_info の中身のキーをログに出力して構造を暴く
-            if not logged_once:
-                print(f"=== [DEBUG STRUCT] result_info type: {type(result_info)} ===")
-                if isinstance(result_info, dict):
-                    print(f"=== [DEBUG STRUCT] keys: {list(result_info.keys())} ===")
-                    for k, v in result_info.items():
-                        print(f"  key: {k}, type: {type(v)}, val_snippet: {str(v)[:100]}")
-                logged_once = True
             
             scored_bets = []
             
@@ -124,8 +112,21 @@ def run_backtest(weights):
                 winning_combo = ""
                 payout = 0.0
                 
-                # ここでは仮に空にしておく（構造判明後に正式な抽出ロジックを組むため）
+                # 正しいキー構造（payoff -> trifecta_all）からデータを取得
+                if isinstance(result_info, dict):
+                    payoff_dict = result_info.get('payoff', {})
+                    if isinstance(payoff_dict, dict):
+                        trifecta_all = payoff_dict.get('trifecta_all', [])
+                        if isinstance(trifecta_all, list) and len(trifecta_all) > 0:
+                            item = trifecta_all[0]
+                            if isinstance(item, dict):
+                                winning_combo = str(item.get('result', ''))
+                                try:
+                                    payout = float(item.get('payoff', 0))
+                                except (ValueError, TypeError):
+                                    payout = 0.0
                 
+                # 的中判定
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
                     total_return += payout
