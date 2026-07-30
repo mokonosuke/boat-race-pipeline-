@@ -40,6 +40,39 @@ def calculate_score(avg_l3, avg_st, avg_motor, avg_course, avg_kim, weights):
     return score
 
 # -----------------------------------------
+# 2.5 展開・見立てを再現するボーナス関数（追加）
+# -----------------------------------------
+def get_tactical_bonus(boats, race_info):
+    """
+    外枠（4号艇・5号艇など）の機力やSTが優れている場合、
+    それらの艇が絡む買い目にボーナス点を加算して「展開の利」を再現する
+    """
+    bonus = 0.0
+    b1, b2, b3 = boats[0], boats[1], boats[2]
+    
+    # 4号艇のデータを取得（機力・ST）
+    boat4_data = race_info.get('boat4', {})
+    motor4 = float(boat4_data.get('motor_2nd_rate', 30.0))
+    st4 = float(boat4_data.get('aveST', 0.20))
+    
+    # 条件A：4号艇が「機力上位（例: 40超え）かつ 鋭いST（例: 0.16以下）」の場合
+    if motor4 >= 40.0 and st4 <= 0.16:
+        if b2 == 4 or b3 == 4:
+            bonus += 15.0
+        if b1 == 4:
+            bonus += 25.0
+
+    # 5号艇のデータを取得
+    boat5_data = race_info.get('boat5', {})
+    motor5 = float(boat5_data.get('motor_2nd_rate', 30.0))
+    
+    # 条件B：5号艇の機力が高く、2・3着に飛び込む形を優遇
+    if motor5 >= 40.0 and (b2 == 5 or b3 == 5):
+        bonus += 10.0
+        
+    return bonus
+
+# -----------------------------------------
 # 3. バックテスト実行メイン関数
 # -----------------------------------------
 def run_backtest(weights):
@@ -94,7 +127,12 @@ def run_backtest(weights):
                 avg_cr = tot_cr / 3
                 avg_kim = tot_kim / 3
                 
+                # 基本スコア計算
                 score = calculate_score(avg_l3, avg_st, avg_motor, avg_cr, avg_kim, weights)
+                
+                # 展開見立て（タクティカル・ボーナス）を加算
+                tactical_bonus = get_tactical_bonus(boats, race_info)
+                score += tactical_bonus
                 
                 scored_bets.append({
                     'combo': combo.strip(),
@@ -126,31 +164,27 @@ def run_backtest(weights):
                                     payout = 0.0
                 
                 is_hit = (top_bet['combo'] == winning_combo)
-                print(f"CHECK [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: {winning_combo} | 一致: {is_hit} | 払戻: {payout}")
-                
                 if is_hit:
                     hit_count += 1
                     total_return += payout
+                
+                print(f"CHECK [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: {winning_combo} | 一致: {is_hit} | 払戻: {payout}")
 
-    recovery_rate = (total_return / total_investment * 100) if total_investment > 0 else 0.0
-    hit_rate = (hit_count / total_bets_count * 100) if total_bets_count > 0 else 0.0
-    
-    return recovery_rate, hit_rate, total_investment, total_return
+    # --- 集計結果の表示 ---
+    print(f"\n--- バックテスト結果 ---")
+    print(f"総投資額: {total_investment}円")
+    print(f"総払戻金: {total_return}円")
+    if total_investment > 0:
+        recovery_rate = (total_return / total_investment) * 100
+        print(f"回収率: {recovery_rate:.2f}%")
 
 if __name__ == "__main__":
-    pure_weights = {
+    sample_weights = {
         'local_3ren': 1.0,
-        'st': 200.0,
-        'motor': 1.2,
-        'course': 0.5,
-        'kimarite': 0.3
+        'st': 100.0,
+        'motor': 1.0,
+        'course': 1.0,
+        'kimarite': 1.0
     }
-    
-    print("1週間分のバックテストを実行中...")
-    rec_rate, h_rate, inv, ret = run_backtest(pure_weights)
-    
-    print("--- 1週間バックテスト結果 ---")
-    print(f"総投資額: {inv}円")
-    print(f"総払戻金: {ret}円")
-    print(f"的中率: {h_rate:.2f}%")
-    print(f"回収率: {rec_rate:.2f}%")
+    run_backtest(sample_weights)
+
