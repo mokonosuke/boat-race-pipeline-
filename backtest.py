@@ -97,7 +97,7 @@ def run_backtest(weights):
                 score = calculate_score(odds_val, avg_l3, avg_st, avg_cr, avg_kim, weights)
                 
                 scored_bets.append({
-                    'combo': combo,
+                    'combo': combo.strip(),
                     'odds': odds_val,
                     'score': score,
                 })
@@ -119,16 +119,16 @@ def run_backtest(weights):
                         if isinstance(trifecta_all, list) and len(trifecta_all) > 0:
                             item = trifecta_all[0]
                             if isinstance(item, dict):
-                                winning_combo = str(item.get('result', ''))
+                                winning_combo = str(item.get('result', '')).strip()
                                 try:
                                     payout = float(item.get('payoff', 0))
                                 except (ValueError, TypeError):
                                     payout = 0.0
                 
-                # 的中判定の確認用ログ
-                print(f"CHECK [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: {winning_combo} | 一致: {top_bet['combo'] == winning_combo} | 払戻: {payout}")
+                is_hit = (top_bet['combo'] == winning_combo)
+                print(f"CHECK [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: {winning_combo} | 一致: {is_hit} | 払戻: {payout}")
                 
-                if top_bet['combo'] == winning_combo:
+                if is_hit:
                     hit_count += 1
                     total_return += payout
 
