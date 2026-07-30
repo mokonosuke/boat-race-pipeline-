@@ -1,15 +1,12 @@
-from datetime import date
+from datetime import date, timedelta
 from pyjpboatrace import PyJPBoatrace
 
 # -----------------------------------------
-# 1. 設定
+# 1. 設定（検証期間を1週間に拡大）
 # -----------------------------------------
 TARGET_JCD = 11  # びわこ競走場
-TEST_DATES = [
-    date(2024, 5, 1),
-    date(2024, 5, 2),
-    date(2024, 5, 3),
-]
+START_DATE = date(2024, 5, 1)
+TEST_DATES = [START_DATE + timedelta(days=i) for i in range(7)]
 
 # -----------------------------------------
 # 2. 実力・機力重視のスコアリング関数
@@ -35,7 +32,6 @@ def get_factor_score(boat_data, assigned_course):
     return local_3ren, ave_st, motor_2nd, course_record_score, kimarite_score
 
 def calculate_score(avg_l3, avg_st, avg_motor, avg_course, avg_kim, weights):
-    # オッズのプラス加算を廃止し、純粋な実力・機力・展開の総合力でスコア化する
     score = avg_l3 * weights['local_3ren']
     score += (0.18 - avg_st) * weights['st']
     score += avg_motor * weights['motor']
@@ -74,7 +70,6 @@ def run_backtest(weights):
                 except (ValueError, TypeError):
                     continue
                 
-                # 指定のオッズ帯（15.0〜35.0倍）に絞る
                 if not (15.0 <= odds_val <= 35.0):
                     continue
                 
@@ -143,7 +138,6 @@ def run_backtest(weights):
     return recovery_rate, hit_rate, total_investment, total_return
 
 if __name__ == "__main__":
-    # オッズの項を除外した純粋な実力・機力重視のウェイト
     pure_weights = {
         'local_3ren': 1.0,
         'st': 200.0,
@@ -152,10 +146,10 @@ if __name__ == "__main__":
         'kimarite': 0.3
     }
     
-    print("実力・機力ベースのスコアリングでバックテストを実行中...")
+    print("1週間分のバックテストを実行中...")
     rec_rate, h_rate, inv, ret = run_backtest(pure_weights)
     
-    print("--- バックテスト結果 ---")
+    print("--- 1週間バックテスト結果 ---")
     print(f"総投資額: {inv}円")
     print(f"総払戻金: {ret}円")
     print(f"的中率: {h_rate:.2f}%")
