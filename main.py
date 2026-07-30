@@ -74,8 +74,7 @@ def predict_and_notify_race(target_date, stadium, rno, weights):
         except (ValueError, TypeError):
             continue
         
-        if not (15.0 <= odds_val <= 35.0):
-            continue
+        # オッズのフィルタリングを削除し、すべての組み合わせを評価対象にする
         
         boats = [int(b) for b in combo.split('-')]
         total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
