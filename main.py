@@ -1,19 +1,15 @@
-from datetime import date, timedelta
+from datetime import date
+import requests
 from pyjpboatrace import PyJPBoatrace
 
 # -----------------------------------------
-# 1. 設定（検証したい過去のびわこSG開催日を指定）
+# 設定
 # -----------------------------------------
+WEBHOOK_URL = "https://discord.com/api/webhooks/1529073836958552134/BqehrTUCsPbcOc5ppWK-pzq2F5I-s5WkUKX9F4H9p6MUrWlr7vm2Zke4qRwVs5mhKYUs"
 TARGET_JCD = 11  # びわこ競走場
-# 例として、過去の開催日（適宜変更してください）
-TEST_DATES = [
-    date(2025, 7, 28),
-    date(2025, 7, 29),
-    date(2025, 7, 30),
-]
 
 # -----------------------------------------
-# 2. スコアリング関数（係数を変数化して最適化に対応）
+# スコアリング関数
 # -----------------------------------------
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
@@ -35,9 +31,6 @@ def get_factor_score(boat_data, assigned_course):
     return local_3ren, ave_st, course_record_score, kimarite_score
 
 def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, weights):
-    """
-    重み付け係数（weights）を辞書で受け取り、スコアを計算する
-    """
     score = avg_local_3ren * weights['local_3ren']
     score += (0.18 - avg_st) * weights['st']
     score += avg_course * weights['course']
@@ -46,90 +39,92 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     return score
 
 # -----------------------------------------
-# 3. バックテスト実行メイン関数
+# Discord通知関数
 # -----------------------------------------
-def run_backtest(weights):
+def send_discord_notification(message):
+    payload = {"content": message}
+    try:
+        response = requests.post(WEBHOOK_URL, json=payload)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Discord通知に失敗しました: {e}")
+
+# -----------------------------------------
+# 指定レースの予測・通知メイン関数
+# -----------------------------------------
+def predict_and_notify_race(target_date, stadium, rno, weights):
     boatrace = PyJPBoatrace()
     
-    total_investment = 0  # 総投資額（円）
-    total_return = 0      # 総払戻金（円）
-    hit_count = 0         # 的中回数
-    total_bets_count = 0  # 買い目総数
+    try:
+        odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=stadium, race=rno)
+        race_info = boatrace.get_race_info(d=target_date, stadium=stadium, race=rno)
+    except Exception as e:
+        print(f"データの取得に失敗しました: {e}")
+        return
     
-    for target_date in TEST_DATES:
-        for rno in range(1, 13):
-            try:
-                odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-                race_info = boatrace.get_race_info(d=target_date, stadium=TARGET_JCD, race=rno)
-                # 実際のレース結果（三連単の的中組み合わせと払戻金）を取得
-                result_info = boatrace.get_result_trifecta(d=target_date, stadium=TARGET_JCD, race=rno)
-            except Exception:
-                # データが存在しない過去日の場合はスキップ
-                continue
-            
-            scored_bets = []
-            
-            for combo, odds in odds_info.items():
-                try:
-                    odds_val = float(odds)
-                except (ValueError, TypeError):
-                    continue
-                
-                if not (15.0 <= odds_val <= 35.0):
-                    continue
-                
-                boats = [int(b) for b in combo.split('-')]
-                total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
-                
-                for idx, b in enumerate(boats):
-                    assigned_course = idx + 1
-                    boat_key = f"boat{b}"
-                    boat_data = race_info.get(boat_key, {})
-                    
-                    l3, st, cr, kim = get_factor_score(boat_data, assigned_course)
-                    total_l3 += l3
-                    total_st += st
-                    total_cr += cr
-                    total_kim += kim
-                
-                avg_l3 = total_l3 / 3
-                avg_st = total_st / 3
-                avg_cr = total_cr / 3
-                avg_kim = total_kim / 3
-                
-                score = calculate_score(odds_val, avg_l3, avg_st, avg_cr, avg_kim, weights)
-                
-                scored_bets.append({
-                    'combo': combo,
-                    'odds': odds_val,
-                    'score': score,
-                })
-            
-            scored_bets.sort(key=lambda x: x['score'], reverse=True)
-            
-            # スコア上位1点のみを「本命買い目」として購入するシミュレーション
-            if scored_bets:
-                top_bet = scored_bets[0]
-                total_investment += 100  # 100円投資
-                total_bets_count += 1
-                
-                # 実際のレース結果と一致するか判定
-                # result_info に実際の的中コンボと配当が含まれていると仮定
-                winning_combo = result_info.get('combo', '')
-                payout = float(result_info.get('payout', 0)) # 100円あたりの払戻金
-                
-                if top_bet['combo'] == winning_combo:
-                    hit_count += 1
-                    total_return += payout
-
-    # 回収率の計算
-    recovery_rate = (total_return / total_investment * 100) if total_investment > 0 else 0.0
-    hit_rate = (hit_count / total_bets_count * 100) if total_bets_count > 0 else 0.0
+    if not odds_info or not race_info:
+        print("オッズまたはレース情報が存在しません。")
+        return
     
-    return recovery_rate, hit_rate, total_investment, total_return
+    scored_bets = []
+    
+    for combo, odds in odds_info.items():
+        try:
+            odds_val = float(odds)
+        except (ValueError, TypeError):
+            continue
+        
+        if not (15.0 <= odds_val <= 35.0):
+            continue
+        
+        boats = [int(b) for b in combo.split('-')]
+        total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
+        
+        for idx, b in enumerate(boats):
+            assigned_course = idx + 1
+            boat_key = f"boat{b}"
+            boat_data = race_info.get(boat_key, {})
+            
+            l3, st, cr, kim = get_factor_score(boat_data, assigned_course)
+            total_l3 += l3
+            total_st += st
+            total_cr += cr
+            total_kim += kim
+        
+        avg_l3 = total_l3 / 3
+        avg_st = total_st / 3
+        avg_cr = total_cr / 3
+        avg_kim = total_kim / 3
+        
+        score = calculate_score(odds_val, avg_l3, avg_st, avg_cr, avg_kim, weights)
+        
+        scored_bets.append({
+            'combo': combo,
+            'odds': odds_val,
+            'score': score,
+        })
+    
+    scored_bets.sort(key=lambda x: x['score'], reverse=True)
+    
+    if scored_bets:
+        top_bet = scored_bets[0]
+        
+        msg = (
+            f"🎯 **【びわこ競艇 予想通知】**\n"
+            f"📅 開催日: {target_date} / 第{rno}レース\n"
+            f"------------------------------------\n"
+            f"🔥 **推奨買い目 (3連単):** `{top_bet['combo']}`\n"
+            f"💰 **想定オッズ:** {top_bet['odds']:.1f}倍\n"
+            f"📊 **評価スコア:** {top_bet['score']:.2f}\n"
+            f"------------------------------------"
+        )
+        
+        send_discord_notification(msg)
+        print("予想をDiscordに通知しました。")
+    else:
+        print("条件に合致する買い目がありませんでした。")
 
 if __name__ == "__main__":
-    # 初期係数モデル
     default_weights = {
         'local_3ren': 0.7,
         'st': 180,
@@ -138,12 +133,7 @@ if __name__ == "__main__":
         'odds': 0.25
     }
     
-    print("バックテストを実行中...")
-    rec_rate, h_rate, inv, ret = run_backtest(default_weights)
+    today = date.today()
+    race_number = 11
     
-    print("--- バックテスト結果 ---")
-    print(f"総投資額: {inv}円")
-    print(f"総払戻金: {ret}円")
-    print(f"的中率: {h_rate:.2f}%")
-    print(f"回収率: {rec_rate:.2f}%")
-
+    predict_and_notify_race(today, TARGET_JCD, race_number, default_weights)
