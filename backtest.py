@@ -12,11 +12,12 @@ TEST_DATES = [
 ]
 
 # -----------------------------------------
-# 2. スコアリング関数
+# 2. 改善版スコアリング関数（モーター性能を追加）
 # -----------------------------------------
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
+    motor_2nd = float(boat_data.get('motor_2nd_rate', 30.0)) # モーター2連率
     
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
@@ -31,13 +32,14 @@ def get_factor_score(boat_data, assigned_course):
     else:
         kimarite_score = 35.0
 
-    return local_3ren, ave_st, course_record_score, kimarite_score
+    return local_3ren, ave_st, motor_2nd, course_record_score, kimarite_score
 
-def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, weights):
-    score = avg_local_3ren * weights['local_3ren']
+def calculate_score(odds_val, avg_l3, avg_st, avg_motor, avg_course, avg_kim, weights):
+    score = avg_l3 * weights['local_3ren']
     score += (0.18 - avg_st) * weights['st']
+    score += avg_motor * weights['motor']  # モーター評価の反映
     score += avg_course * weights['course']
-    score += avg_kimarite * weights['kimarite']
+    score += avg_kim * weights['kimarite']
     score += odds_val * weights['odds']
     return score
 
@@ -72,29 +74,32 @@ def run_backtest(weights):
                 except (ValueError, TypeError):
                     continue
                 
+                # 狙うオッズ帯（15.0〜35.0倍）
                 if not (15.0 <= odds_val <= 35.0):
                     continue
                 
                 boats = [int(b) for b in combo.split('-')]
-                total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
+                tot_l3, tot_st, tot_motor, tot_cr, tot_kim = 0, 0, 0, 0, 0
                 
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
                     
-                    l3, st, cr, kim = get_factor_score(boat_data, assigned_course)
-                    total_l3 += l3
-                    total_st += st
-                    total_cr += cr
-                    total_kim += kim
+                    l3, st, motor, cr, kim = get_factor_score(boat_data, assigned_course)
+                    tot_l3 += l3
+                    tot_st += st
+                    tot_motor += motor
+                    tot_cr += cr
+                    tot_kim += kim
                 
-                avg_l3 = total_l3 / 3
-                avg_st = total_st / 3
-                avg_cr = total_cr / 3
-                avg_kim = total_kim / 3
+                avg_l3 = tot_l3 / 3
+                avg_st = tot_st / 3
+                avg_motor = tot_motor / 3
+                avg_cr = tot_cr / 3
+                avg_kim = tot_kim / 3
                 
-                score = calculate_score(odds_val, avg_l3, avg_st, avg_cr, avg_kim, weights)
+                score = calculate_score(odds_val, avg_l3, avg_st, avg_motor, avg_cr, avg_kim, weights)
                 
                 scored_bets.append({
                     'combo': combo.strip(),
@@ -138,16 +143,18 @@ def run_backtest(weights):
     return recovery_rate, hit_rate, total_investment, total_return
 
 if __name__ == "__main__":
-    default_weights = {
-        'local_3ren': 0.7,
-        'st': 180,
+    # チューニング用ウェイト（モーター性能を重視に調整）
+    optimized_weights = {
+        'local_3ren': 0.5,
+        'st': 150.0,
+        'motor': 0.8,     # 新たに追加したモーター評価の係数
         'course': 0.3,
         'kimarite': 0.2,
-        'odds': 0.25
+        'odds': 0.1
     }
     
-    print("バックテストを実行中...")
-    rec_rate, h_rate, inv, ret = run_backtest(default_weights)
+    print("最適化ウェイトでのバックテストを実行中...")
+    rec_rate, h_rate, inv, ret = run_backtest(optimized_weights)
     
     print("--- バックテスト結果 ---")
     print(f"総投資額: {inv}円")
