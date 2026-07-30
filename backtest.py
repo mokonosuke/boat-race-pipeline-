@@ -12,12 +12,12 @@ TEST_DATES = [
 ]
 
 # -----------------------------------------
-# 2. 改善版スコアリング関数（モーター性能を追加）
+# 2. 実力・機力重視のスコアリング関数
 # -----------------------------------------
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
-    motor_2nd = float(boat_data.get('motor_2nd_rate', 30.0)) # モーター2連率
+    motor_2nd = float(boat_data.get('motor_2nd_rate', 30.0))
     
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
@@ -34,13 +34,13 @@ def get_factor_score(boat_data, assigned_course):
 
     return local_3ren, ave_st, motor_2nd, course_record_score, kimarite_score
 
-def calculate_score(odds_val, avg_l3, avg_st, avg_motor, avg_course, avg_kim, weights):
+def calculate_score(avg_l3, avg_st, avg_motor, avg_course, avg_kim, weights):
+    # オッズのプラス加算を廃止し、純粋な実力・機力・展開の総合力でスコア化する
     score = avg_l3 * weights['local_3ren']
     score += (0.18 - avg_st) * weights['st']
-    score += avg_motor * weights['motor']  # モーター評価の反映
+    score += avg_motor * weights['motor']
     score += avg_course * weights['course']
     score += avg_kim * weights['kimarite']
-    score += odds_val * weights['odds']
     return score
 
 # -----------------------------------------
@@ -74,7 +74,7 @@ def run_backtest(weights):
                 except (ValueError, TypeError):
                     continue
                 
-                # 狙うオッズ帯（15.0〜35.0倍）
+                # 指定のオッズ帯（15.0〜35.0倍）に絞る
                 if not (15.0 <= odds_val <= 35.0):
                     continue
                 
@@ -99,7 +99,7 @@ def run_backtest(weights):
                 avg_cr = tot_cr / 3
                 avg_kim = tot_kim / 3
                 
-                score = calculate_score(odds_val, avg_l3, avg_st, avg_motor, avg_cr, avg_kim, weights)
+                score = calculate_score(avg_l3, avg_st, avg_motor, avg_cr, avg_kim, weights)
                 
                 scored_bets.append({
                     'combo': combo.strip(),
@@ -143,18 +143,17 @@ def run_backtest(weights):
     return recovery_rate, hit_rate, total_investment, total_return
 
 if __name__ == "__main__":
-    # チューニング用ウェイト（モーター性能を重視に調整）
-    optimized_weights = {
-        'local_3ren': 0.5,
-        'st': 150.0,
-        'motor': 0.8,     # 新たに追加したモーター評価の係数
-        'course': 0.3,
-        'kimarite': 0.2,
-        'odds': 0.1
+    # オッズの項を除外した純粋な実力・機力重視のウェイト
+    pure_weights = {
+        'local_3ren': 1.0,
+        'st': 200.0,
+        'motor': 1.2,
+        'course': 0.5,
+        'kimarite': 0.3
     }
     
-    print("最適化ウェイトでのバックテストを実行中...")
-    rec_rate, h_rate, inv, ret = run_backtest(optimized_weights)
+    print("実力・機力ベースのスコアリングでバックテストを実行中...")
+    rec_rate, h_rate, inv, ret = run_backtest(pure_weights)
     
     print("--- バックテスト結果 ---")
     print(f"総投資額: {inv}円")
