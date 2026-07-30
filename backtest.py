@@ -112,7 +112,6 @@ def run_backtest(weights):
                 winning_combo = ""
                 payout = 0.0
                 
-                # 正しいキー構造（payoff -> trifecta_all）からデータを取得
                 if isinstance(result_info, dict):
                     payoff_dict = result_info.get('payoff', {})
                     if isinstance(payoff_dict, dict):
@@ -126,7 +125,9 @@ def run_backtest(weights):
                                 except (ValueError, TypeError):
                                     payout = 0.0
                 
-                # 的中判定
+                # 的中判定の確認用ログ
+                print(f"CHECK [{target_date} R{rno}] 予想: {top_bet['combo']} | 結果: {winning_combo} | 一致: {top_bet['combo'] == winning_combo} | 払戻: {payout}")
+                
                 if top_bet['combo'] == winning_combo:
                     hit_count += 1
                     total_return += payout
