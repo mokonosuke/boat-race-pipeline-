@@ -173,7 +173,6 @@ def run_backtest_ml(cache_data):
     X = df[features]
     y = df['is_win']
     
-    # 80%を学習、20%をテスト用に分割
     X_train, X_test, y_train, y_test, df_train, df_test = train_test_split(
         X, y, df, test_size=0.2, random_state=42
     )
@@ -181,11 +180,9 @@ def run_backtest_ml(cache_data):
     model = lgb.LGBMClassifier(random_state=42, verbose=-1)
     model.fit(X_train, y_train)
     
-    # テストデータに対して予測確率を付与
     df_test = df_test.copy()
     df_test['pred_prob'] = model.predict_proba(X_test)[:, 1]
     
-    # 各レースごとに、最も予測確率が高い組み合わせを1点買いすると仮定してバックテスト
     total_races = 0
     hit_count = 0
     total_investment = 0
@@ -194,9 +191,8 @@ def run_backtest_ml(cache_data):
     grouped = df_test.groupby(['date', 'rno'])
     for _, group in grouped:
         total_races += 1
-        total_investment += 100  (1レース100円賭け)
+        total_investment += 100  # 1レース100円賭け
         
-        # 予測確率が最も高い買い目を抽出
         best_bet = group.loc[group['pred_prob'].idxmax()]
         
         if best_bet['combo'] == best_bet['actual_win']:
