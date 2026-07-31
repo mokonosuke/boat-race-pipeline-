@@ -60,6 +60,43 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     score += odds_val * weights['odds']
     return score
 
+def evaluate_and_notify(webhook_url):
+    history = load_history()
+    settled = [h for h in history if h.get("status") in ["win", "lose"]]
+    total_settled = len(settled)
+    
+    if total_settled == 0:
+        print("📊 確定したレース結果がありません。")
+        return
+
+    wins = [h for h in settled if h["status"] == "win"]
+    total_wins = len(wins)
+    hit_rate = (total_wins / total_settled) * 100
+
+    # 1レース100円賭けと仮定
+    investment = total_settled * 100
+    payout = sum(float(h["odds"]) * 100 for h in wins)
+    recovery_rate = (payout / investment) * 100 if investment > 0 else 0
+
+    summary_text = (
+        f"📊 **【バックテスト集計結果】**\n"
+        f"・対象レース数: {total_settled}\n"
+        f"・的中数: {total_wins}\n"
+        f"・的中率: {hit_rate:.2f}%\n"
+        f"・総投資額: {investment}円\n"
+        f"・払戻金: {int(payout)}円\n"
+        f"・回収率: {recovery_rate:.2f}%"
+    )
+    
+    print("\n" + summary_text.replace("**", ""))
+
+    if webhook_url:
+        try:
+            requests.post(webhook_url, json={"content": summary_text})
+            print("✅ Discordへ集計結果を通知しました。")
+        except Exception as e:
+            print(f"⚠️ Discord通知失敗: {e}")
+
 def run_backtest_for_period(start_date, end_date, weights):
     print("🚀 [3/5] PyJPBoatrace 初期化中...")
     try:
@@ -91,7 +128,6 @@ def run_backtest_for_period(start_date, end_date, weights):
             
             scored_bets = []
             for combo, odds in odds_info.items():
-                # メタデータキー（stadium等）が混ざっている場合はスキップ
                 if not isinstance(combo, str) or '-' not in combo:
                     continue
                 try:
@@ -173,4 +209,6 @@ if __name__ == "__main__":
     end_d = date(2026, 7, 30)
     
     run_backtest_for_period(start_d, end_d, default_weights)
-    print("🚀 [5/5] すべて完了")
+    
+    print("🚀 [5/5] 集計を実行中...")
+    evaluate_and_notify(WEBHOOK_URL)
