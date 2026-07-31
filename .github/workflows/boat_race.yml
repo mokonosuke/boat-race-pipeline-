@@ -2,6 +2,8 @@ name: Run Boat Race Pipeline
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # 毎日UTC 0:00（日本時間 朝9:00）に自動実行
 
 jobs:
   run-backtest:
