@@ -1,4 +1,3 @@
-
 import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
@@ -146,20 +145,23 @@ def fetch_and_cache_races(start_date, end_date):
     print(f"✅ キャッシュ保存完了: {len(cache_data)}レース")
     return cache_data
 
-def train_and_evaluate_ml(cache_data):
-    print("🤖 [3/5] 機械学習モデルの訓練と評価を実行中...")
+def run_backtest_ml(cache_data):
+    print("🤖 [3/5] 機械学習モデルの訓練とバックテストを実行中...")
     
     dataset = []
-    for race in cache_data:
+    for race_idx, race in enumerate(cache_data):
         actual_win = race['actual_win']
         for bet in race['combos']:
             dataset.append({
+                'race_id': race_idx,
+                'combo': bet['combo'],
+                'odds': bet['odds'],
                 'local_3ren': bet['avg_l3'],
                 'st': bet['avg_st'],
                 'course': bet['avg_cr'],
                 'kimarite': bet['avg_kim'],
-                'odds': bet['odds'],
-                'is_win': 1 if bet['combo'] == actual_win else 0
+                'is_win': 1 if bet['combo'] == actual_win else 0,
+                'actual_win': actual_win
             })
             
     df = pd.DataFrame(dataset)
@@ -167,31 +169,75 @@ def train_and_evaluate_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    X = df[['local_3ren', 'st', 'course', 'kimarite', 'odds']]
+    features = ['local_3ren', 'st', 'course', 'kimarite', 'odds']
+    X = df[features]
     y = df['is_win']
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    # 80%を学習、20%をテスト用に分割
+    X_train, X_test, y_train, y_test, df_train, df_test = train_test_split(
+        X, y, df, test_size=0.2, random_state=42
+    )
     
     model = lgb.LGBMClassifier(random_state=42, verbose=-1)
     model.fit(X_train, y_train)
     
-    print("✅ 機械学習モデルの学習が完了しました！")
-    return model
+    # テストデータに対して予測確率を付与
+    df_test = df_test.copy()
+    df_test['pred_prob'] = model.predict_proba(X_test)[:, 1]
+    
+    # 各レースごとに、最も予測確率が高い組み合わせを1点買いすると仮定してバックテスト
+    total_races = 0
+    hit_count = 0
+    total_investment = 0
+    total_payout = 0
+    
+    grouped = df_test.groupby(['date', 'rno'])
+    for _, group in grouped:
+        total_races += 1
+        total_investment += 100  (1レース100円賭け)
+        
+        # 予測確率が最も高い買い目を抽出
+        best_bet = group.loc[group['pred_prob'].idxmax()]
+        
+        if best_bet['combo'] == best_bet['actual_win']:
+            hit_count += 1
+            payout = 100 * best_bet['odds']
+            total_payout += payout
+
+    roi = (total_payout / total_investment * 100) if total_investment > 0 else 0
+    
+    results = {
+        "total_races": total_races,
+        "hit_count": hit_count,
+        "hit_rate": (hit_count / total_races * 100) if total_races > 0 else 0,
+        "total_investment": total_investment,
+        "total_payout": int(total_payout),
+        "roi": round(roi, 2)
+    }
+    
+    print(f"✅ バックテスト完了: 回収率 {results['roi']}%")
+    return results
 
 if __name__ == "__main__":
     start_d = date(2026, 7, 28)
     end_d = date(2026, 7, 30)
     
     cache_data = fetch_and_cache_races(start_d, end_d)
-    model = train_and_evaluate_ml(cache_data)
+    results = run_backtest_ml(cache_data)
     
-    if model:
-        summary_text = "🤖 **【機械学習パイプライン実行成功】**\nLightGBMによるモデルの学習・評価が正常に完了しました！"
+    if results:
+        summary_text = (
+            f"🎯 **【LightGBM バックテスト結果】**\n"
+            f"・検証レース数: {results['total_races']}件\n"
+            f"・最高回収率: **{results['roi']}%**\n"
+            f"・的中数 / 的中率: {results['hit_count']}件 ({results['hit_rate']:.2f}%)\n"
+            f"・総投資 / 払戻: {results['total_investment']}円 → {results['total_payout']}円"
+        )
         print("\n" + summary_text.replace("**", ""))
         
         if WEBHOOK_URL:
             try:
                 requests.post(WEBHOOK_URL, json={"content": summary_text})
-                print("✅ Discordへ完了通知を送信しました。")
+                print("✅ Discordへバックテスト結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
