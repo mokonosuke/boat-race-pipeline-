@@ -4,16 +4,10 @@ import os
 import requests
 from pyjpboatrace import PyJPBoatrace
 
-# -----------------------------------------
-# 設定
-# -----------------------------------------
 WEBHOOK_URL = "https://discord.com/api/webhooks/1529073836958552134/BqehrTUCsPbcOc5ppWK-pzq2F5I-s5WkUKX9F4H9p6MUrWlr7vm2Zke4qRwVs5mhKYUs"
 TARGET_JCD = 11  # びわこ競走場
 HISTORY_FILE = "race_history.json"
 
-# -----------------------------------------
-# 履歴データの読み書き関数
-# -----------------------------------------
 def load_history():
     if os.path.exists(HISTORY_FILE):
         try:
@@ -27,9 +21,6 @@ def save_history(history):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=4)
 
-# -----------------------------------------
-# スコアリング関数
-# -----------------------------------------
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
@@ -57,9 +48,6 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     score += odds_val * weights['odds']
     return score
 
-# -----------------------------------------
-# Discord通知関数
-# -----------------------------------------
 def send_discord_notification(message):
     payload = {"content": message}
     try:
@@ -68,10 +56,8 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"Discord通知に失敗しました: {e}")
 
-# -----------------------------------------
-# 過去の未確定レースの結果チェック（自己成長の検証フェーズ）
-# -----------------------------------------
 def check_past_results(boatrace):
+    print("▶ 過去の未確定レースの結果をチェック中...")
     history = load_history()
     updated = False
     
@@ -82,10 +68,9 @@ def check_past_results(boatrace):
             rno = item["rno"]
             
             try:
-                # レース結果の取得を試みる
                 result_info = boatrace.get_result(d=target_date, stadium=stadium, race=rno)
                 if result_info and "trifecta" in result_info:
-                    actual_win = result_info["trifecta"]  # 実際の3連単結果 (例: '1-2-3')
+                    actual_win = result_info["trifecta"]
                     predicted_win = item["combo"]
                     
                     if actual_win == predicted_win:
@@ -97,32 +82,36 @@ def check_past_results(boatrace):
                     
                     updated = True
             except Exception:
-                # まだレースが終了していない場合はスキップ
                 pass
                 
     if updated:
         save_history(history)
+    print("▶ 過去の結果チェック完了")
 
-# -----------------------------------------
-# 指定レースの予測・通知メイン関数
-# -----------------------------------------
 def predict_and_notify_race(target_date, stadium, rno, weights):
     boatrace = PyJPBoatrace()
     
-    # 1. まず過去の未確定レースの結果をチェックして更新
+    # 1. 過去結果チェック
     check_past_results(boatrace)
     
     try:
+        print(f"▶ オッズ情報（3連単）を取得中 (会場:{stadium}, レース:{rno})...")
         odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=stadium, race=rno)
+        print("▶ オッズ情報の取得成功")
+        
+        print("▶ レース詳細情報を取得中...")
         race_info = boatrace.get_race_info(d=target_date, stadium=stadium, race=rno)
+        print("▶ レース情報の取得成功")
+        
     except Exception as e:
-        print(f"データの取得に失敗しました: {e}")
+        print(f"❌ データの取得に失敗しました: {e}")
         return
     
     if not odds_info or not race_info:
-        print("オッズまたはレース情報が存在しません。")
+        print("❌ オッズまたはレース情報が存在しません（データ未公開の可能性）。")
         return
     
+    print("▶ スコアリング計算中...")
     scored_bets = []
     
     for combo, odds in odds_info.items():
@@ -163,7 +152,6 @@ def predict_and_notify_race(target_date, stadium, rno, weights):
     if scored_bets:
         top_bet = scored_bets[0]
         
-        # 2. 予想を履歴（JSON）に保存
         history = load_history()
         history.append({
             "date": str(target_date),
@@ -187,9 +175,9 @@ def predict_and_notify_race(target_date, stadium, rno, weights):
         )
         
         send_discord_notification(msg)
-        print("予想をDiscordに通知し、履歴に保存しました。")
+        print("✅ 予想をDiscordに通知し、履歴に保存しました。")
     else:
-        print("条件に合致する買い目がありませんでした。")
+        print("❌ 条件に合致する買い目がありませんでした。")
 
 if __name__ == "__main__":
     default_weights = {
@@ -201,6 +189,7 @@ if __name__ == "__main__":
     }
     
     today = date.today()
-    race_number = 11  # 必要に応じてレース番号を変更してください
+    race_number = 11
     
     predict_and_notify_race(today, TARGET_JCD, race_number, default_weights)
+
