@@ -79,7 +79,8 @@ def run_backtest_for_period(start_date, end_date, weights):
             try:
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
-                result_info = boatrace.get_result(d=current_date, stadium=TARGET_JCD, race=rno)
+                # 正しいメソッド名 get_race_result に修正
+                result_info = boatrace.get_race_result(d=current_date, stadium=TARGET_JCD, race=rno)
                 print(f"  成功: 第{rno}R")
             except Exception as e:
                 print(f"  ⚠️ スキップ: {e}")
@@ -171,4 +172,3 @@ if __name__ == "__main__":
     
     run_backtest_for_period(start_d, end_d, default_weights)
     print("🚀 [5/5] すべて完了")
-
