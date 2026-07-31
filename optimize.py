@@ -25,10 +25,15 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TARGET_JCD = 11  # びわこ競走場
 
 def get_factor_score(boat_data, assigned_course):
+    # 基本指標
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
+    
+    # 追加の特徴量（モーター・ボート性能）
+    motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
+    boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
     
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
@@ -40,7 +45,7 @@ def get_factor_score(boat_data, assigned_course):
     else:
         kimarite_score = 35.0
 
-    return local_3ren, ave_st, course_record_score, kimarite_score
+    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate
 
 def extract_trifecta_result(result_data):
     if not result_data:
@@ -104,16 +109,18 @@ def fetch_recent_races(start_date, end_date):
                 except (ValueError, TypeError):
                     continue
                 
-                total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
+                total_l3, total_st, total_cr, total_kim, total_motor, total_boat = 0, 0, 0, 0, 0, 0
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    l3, st, cr, kim = get_factor_score(boat_data, assigned_course)
+                    l3, st, cr, kim, mot, bot = get_factor_score(boat_data, assigned_course)
                     total_l3 += l3
                     total_st += st
                     total_cr += cr
                     total_kim += kim
+                    total_motor += mot
+                    total_boat += bot
                 
                 race_combos.append({
                     'combo': combo,
@@ -121,7 +128,9 @@ def fetch_recent_races(start_date, end_date):
                     'avg_l3': total_l3 / 3,
                     'avg_st': total_st / 3,
                     'avg_cr': total_cr / 3,
-                    'avg_kim': total_kim / 3
+                    'avg_kim': total_kim / 3,
+                    'avg_motor': total_motor / 3,
+                    'avg_boat': total_boat / 3
                 })
             
             if race_combos:
@@ -154,6 +163,8 @@ def run_backtest_ml(cache_data):
                 'st': bet['avg_st'],
                 'course': bet['avg_cr'],
                 'kimarite': bet['avg_kim'],
+                'motor': bet['avg_motor'],
+                'boat': bet['avg_boat'],
                 'is_win': 1 if bet['combo'] == actual_win else 0,
                 'actual_win': actual_win
             })
@@ -163,7 +174,8 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    features = ['local_3ren', 'st', 'course', 'kimarite', 'odds']
+    # 特徴量リストにモーターとボートを追加
+    features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'odds']
     X = df[features]
     y = df['is_win']
     
@@ -209,15 +221,16 @@ def run_backtest_ml(cache_data):
     return results
 
 if __name__ == "__main__":
+    # 期間を直近14日間に拡大（必要に応じて日数を変更可能）
     end_d = date.today() - timedelta(days=1)
-    start_d = end_d - timedelta(days=3)
+    start_d = end_d - timedelta(days=14)
     
     cache_data = fetch_recent_races(start_d, end_d)
     results = run_backtest_ml(cache_data)
     
     if results:
         summary_text = (
-            f"🎯 **【LightGBM 自動定期実行結果】**\n"
+            f"🎯 **【LightGBM 拡張版定期実行結果】**\n"
             f"・検証対象期間: {start_d} 〜 {end_d}\n"
             f"・検証レース数: {results['total_races']}件\n"
             f"・回収率: **{results['roi']}%**\n"
@@ -232,3 +245,4 @@ if __name__ == "__main__":
                 print("✅ Discordへ結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
+
