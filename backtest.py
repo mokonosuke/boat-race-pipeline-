@@ -134,7 +134,6 @@ def fetch_and_cache_races(start_date, end_date):
 def optimize_weights(cache_data):
     print("🚀 [3/4] 重みの最適化（グリッドサーチ）を実行中...")
     
-    # 探索するパラメータの候補範囲
     param_grid = {
         'local_3ren': [0.3, 0.7, 1.0],
         'st': [100, 180, 250],
@@ -156,7 +155,7 @@ def optimize_weights(cache_data):
         print("❌ 検証可能なレースデータがありません。")
         return None
 
-    for idx, combo_vals in enumerate(combinations):
+    for combo_vals in combinations:
         weights = dict(zip(keys, combo_vals))
         
         investment = total_races * 100
@@ -213,7 +212,7 @@ if __name__ == "__main__":
             f"・総投資 / 払戻: {stats['investment']}円 → {int(stats['payout'])}円\n\n"
             f"📌 **最適ウェイト設定:**\n"
             f"```json\n{json.dumps(best_w, indent=4, ensure_ascii=False)}\n```"
-        0)
+        )
         
         print("\n" + summary_text.replace("**", "").replace("```json", "").replace("```", ""))
         
