@@ -7,6 +7,7 @@ print("🚀 [1/5] スクリプト開始")
 import os
 from datetime import date, timedelta
 import json
+import re
 import requests
 
 print("🚀 [2/5] モジュールインポート完了")
@@ -60,6 +61,31 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     score += odds_val * weights['odds']
     return score
 
+def extract_trifecta_result(result_data):
+    """結果データの中から '1-2-3' のような三連単の組み合わせを自動的に探す"""
+    if not result_data:
+        return None
+    
+    if isinstance(result_data, dict):
+        for k, v in result_data.items():
+            if isinstance(v, str) and re.match(r'^[1-6]-[1-6]-[1-6]$', v.strip()):
+                return v.strip()
+            if isinstance(v, (dict, list)):
+                res = extract_trifecta_result(v)
+                if res:
+                    return res
+    elif isinstance(result_data, (list, tuple)):
+        for item in result_data:
+            res = extract_trifecta_result(item)
+            if res:
+                return res
+    elif isinstance(result_data, str):
+        match = re.search(r'([1-6]-[1-6]-[1-6])', result_data)
+        if match:
+            return match.group(1)
+            
+    return None
+
 def evaluate_and_notify(webhook_url):
     history = load_history()
     settled = [h for h in history if h.get("status") in ["win", "lose"]]
@@ -78,7 +104,7 @@ def evaluate_and_notify(webhook_url):
     recovery_rate = (payout / investment) * 100 if investment > 0 else 0
 
     summary_text = (
-        f"📊 **【バックテスト集計結果】**\n"
+        f"📊 **【バックテスト集計結果（修正版）】**\n"
         f"・対象レース数: {total_settled}\n"
         f"・的中数: {total_wins}\n"
         f"・的中率: {hit_rate:.2f}%\n"
@@ -116,10 +142,7 @@ def run_backtest_for_period(start_date, end_date, weights):
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_race_result(d=current_date, stadium=TARGET_JCD, race=rno)
-                print(f"  成功: 第{rno}R (結果データ型: {type(result_info)})")
-                # デバッグ用に結果の内容を少し表示
-                if result_info:
-                    print(f"    [DEBUG結果の中身]: {result_info}")
+                print(f"  成功: 第{rno}R")
             except Exception as e:
                 print(f"  ⚠️ スキップ: {e}")
                 continue
@@ -165,24 +188,17 @@ def run_backtest_for_period(start_date, end_date, weights):
             top_bet = scored_bets[0]
             
             status = "pending"
-            # 結果データの構造を確認するための判定
-            if result_info:
-                actual_win = None
-                if isinstance(result_info, dict):
-                    # よくあるキーの候補を順に探す
-                    actual_win = result_info.get("trifecta") or result_info.get("3rentan") or result_info.get("result")
-                
-                if actual_win:
-                    if actual_win == top_bet['combo']:
-                        status = "win"
-                        print(f"    🎉 的中: {top_bet['combo']}")
-                    else:
-                        status = "lose"
-                        print(f"    ❌ 不的中: 予想={top_bet['combo']}, 結果={actual_win}")
+            actual_win = extract_trifecta_result(result_info)
+            
+            if actual_win:
+                if actual_win == top_bet['combo']:
+                    status = "win"
+                    print(f"    🎉 的中: 予想={top_bet['combo']}, 結果={actual_win}")
                 else:
-                    print(f"    ⏳ 結果キー未検出 (予想={top_bet['combo']})")
+                    status = "lose"
+                    print(f"    ❌ 不的中: 予想={top_bet['combo']}, 結果={actual_win}")
             else:
-                print(f"    ⏳ 未確定: {top_bet['combo']}")
+                print(f"    ⏳ 結果抽出できず (予想={top_bet['combo']})")
             
             history = load_history()
             existing = next((h for h in history if h["date"] == str(current_date) and h["stadium"] == TARGET_JCD and h["rno"] == rno), None)
@@ -222,4 +238,3 @@ if __name__ == "__main__":
     
     print("🚀 [5/5] 集計を実行中...")
     evaluate_and_notify(WEBHOOK_URL)
-
