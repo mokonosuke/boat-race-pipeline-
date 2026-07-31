@@ -73,7 +73,6 @@ def evaluate_and_notify(webhook_url):
     total_wins = len(wins)
     hit_rate = (total_wins / total_settled) * 100
 
-    # 1レース100円賭けと仮定
     investment = total_settled * 100
     payout = sum(float(h["odds"]) * 100 for h in wins)
     recovery_rate = (payout / investment) * 100 if investment > 0 else 0
@@ -117,7 +116,10 @@ def run_backtest_for_period(start_date, end_date, weights):
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_race_result(d=current_date, stadium=TARGET_JCD, race=rno)
-                print(f"  成功: 第{rno}R")
+                print(f"  成功: 第{rno}R (結果データ型: {type(result_info)})")
+                # デバッグ用に結果の内容を少し表示
+                if result_info:
+                    print(f"    [DEBUG結果の中身]: {result_info}")
             except Exception as e:
                 print(f"  ⚠️ スキップ: {e}")
                 continue
@@ -163,14 +165,22 @@ def run_backtest_for_period(start_date, end_date, weights):
             top_bet = scored_bets[0]
             
             status = "pending"
-            if result_info and "trifecta" in result_info:
-                actual_win = result_info["trifecta"]
-                if actual_win == top_bet['combo']:
-                    status = "win"
-                    print(f"    🎉 的中: {top_bet['combo']}")
+            # 結果データの構造を確認するための判定
+            if result_info:
+                actual_win = None
+                if isinstance(result_info, dict):
+                    # よくあるキーの候補を順に探す
+                    actual_win = result_info.get("trifecta") or result_info.get("3rentan") or result_info.get("result")
+                
+                if actual_win:
+                    if actual_win == top_bet['combo']:
+                        status = "win"
+                        print(f"    🎉 的中: {top_bet['combo']}")
+                    else:
+                        status = "lose"
+                        print(f"    ❌ 不的中: 予想={top_bet['combo']}, 結果={actual_win}")
                 else:
-                    status = "lose"
-                    print(f"    ❌ 不的中: 予想={top_bet['combo']}, 結果={actual_win}")
+                    print(f"    ⏳ 結果キー未検出 (予想={top_bet['combo']})")
             else:
                 print(f"    ⏳ 未確定: {top_bet['combo']}")
             
@@ -212,3 +222,4 @@ if __name__ == "__main__":
     
     print("🚀 [5/5] 集計を実行中...")
     evaluate_and_notify(WEBHOOK_URL)
+
