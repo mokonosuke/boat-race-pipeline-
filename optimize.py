@@ -23,7 +23,6 @@ except Exception as e:
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TARGET_JCD = 11  # びわこ競走場
-CACHE_FILE = "race_cache.json"
 
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
@@ -65,13 +64,8 @@ def extract_trifecta_result(result_data):
             return match.group(1)
     return None
 
-def fetch_and_cache_races(start_date, end_date):
-    if os.path.exists(CACHE_FILE):
-        print("📂 既存のレースキャッシュを読み込みます...")
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    print("🚀 APIからデータを取得してキャッシュを作成します...")
+def fetch_recent_races(start_date, end_date):
+    print("🚀 APIから最新データを取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -140,9 +134,7 @@ def fetch_and_cache_races(start_date, end_date):
                 
         current_date += timedelta(days=1)
 
-    with open(CACHE_FILE, "w", encoding="utf-8") as f:
-        json.dump(cache_data, f, ensure_ascii=False, indent=4)
-    print(f"✅ キャッシュ保存完了: {len(cache_data)}レース")
+    print(f"✅ データ取得完了: {len(cache_data)}レース")
     return cache_data
 
 def run_backtest_ml(cache_data):
@@ -193,7 +185,7 @@ def run_backtest_ml(cache_data):
     grouped = df_test.groupby(['date', 'rno'])
     for _, group in grouped:
         total_races += 1
-        total_investment += 100  # 1レース100円賭け
+        total_investment += 100
         
         best_bet = group.loc[group['pred_prob'].idxmax()]
         
@@ -217,17 +209,18 @@ def run_backtest_ml(cache_data):
     return results
 
 if __name__ == "__main__":
-    start_d = date(2026, 7, 28)
-    end_d = date(2026, 7, 30)
+    end_d = date.today() - timedelta(days=1)
+    start_d = end_d - timedelta(days=3)
     
-    cache_data = fetch_and_cache_races(start_d, end_d)
+    cache_data = fetch_recent_races(start_d, end_d)
     results = run_backtest_ml(cache_data)
     
     if results:
         summary_text = (
-            f"🎯 **【LightGBM バックテスト結果】**\n"
+            f"🎯 **【LightGBM 自動定期実行結果】**\n"
+            f"・検証対象期間: {start_d} 〜 {end_d}\n"
             f"・検証レース数: {results['total_races']}件\n"
-            f"・最高回収率: **{results['roi']}%**\n"
+            f"・回収率: **{results['roi']}%**\n"
             f"・的中数 / 的中率: {results['hit_count']}件 ({results['hit_rate']:.2f}%)\n"
             f"・総投資 / 払戻: {results['total_investment']}円 → {results['total_payout']}円"
         )
@@ -236,6 +229,6 @@ if __name__ == "__main__":
         if WEBHOOK_URL:
             try:
                 requests.post(WEBHOOK_URL, json={"content": summary_text})
-                print("✅ Discordへバックテスト結果を送信しました。")
+                print("✅ Discordへ結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
