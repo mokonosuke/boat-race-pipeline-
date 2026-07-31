@@ -79,7 +79,6 @@ def run_backtest_for_period(start_date, end_date, weights):
             try:
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
-                # 正しいメソッド名 get_race_result に修正
                 result_info = boatrace.get_race_result(d=current_date, stadium=TARGET_JCD, race=rno)
                 print(f"  成功: 第{rno}R")
             except Exception as e:
@@ -92,12 +91,15 @@ def run_backtest_for_period(start_date, end_date, weights):
             
             scored_bets = []
             for combo, odds in odds_info.items():
+                # メタデータキー（stadium等）が混ざっている場合はスキップ
+                if not isinstance(combo, str) or '-' not in combo:
+                    continue
                 try:
+                    boats = [int(b) for b in combo.split('-')]
                     odds_val = float(odds)
                 except (ValueError, TypeError):
                     continue
                 
-                boats = [int(b) for b in combo.split('-')]
                 total_l3, total_st, total_cr, total_kim = 0, 0, 0, 0
                 
                 for idx, b in enumerate(boats):
