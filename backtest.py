@@ -1,8 +1,21 @@
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(line_buffering=True)
+
+print("🚀 [1/5] スクリプト開始")
+
+import os
 from datetime import date, timedelta
 import json
-import os
 import requests
-from pyjpboatrace import PyJPBoatrace
+
+print("🚀 [2/5] モジュールインポート完了")
+try:
+    from pyjpboatrace import PyJPBoatrace
+    print("✅ PyJPBoatrace 読み込み成功")
+except Exception as e:
+    print(f"❌ 読み込み失敗: {e}")
+    sys.exit(1)
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TARGET_JCD = 11  # びわこ競走場
@@ -24,7 +37,6 @@ def save_history(history):
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
-    
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
     
@@ -48,37 +60,33 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     score += odds_val * weights['odds']
     return score
 
-def send_discord_notification(message):
-    if not WEBHOOK_URL:
-        return
-    payload = {"content": message}
-    try:
-        response = requests.post(WEBHOOK_URL, json=payload, timeout=10)
-        response.raise_for_status()
-    except Exception as e:
-        print(f"Discord通知に失敗しました: {e}")
-
 def run_backtest_for_period(start_date, end_date, weights):
-    boatrace = PyJPBoatrace()
+    print("🚀 [3/5] PyJPBoatrace 初期化中...")
+    try:
+        boatrace = PyJPBoatrace()
+        print("✅ 初期化成功")
+    except Exception as e:
+        print(f"❌ 初期化失敗: {e}")
+        return
+
     current_date = start_date
     
     while current_date <= end_date:
-        print(f"========================================")
-        print(f"📅 対象日付の処理開始: {current_date}")
-        print(f"========================================")
+        print(f"\n📅 対象日: {current_date}")
         
         for rno in range(1, 13):
-            print(f"▶ [{current_date}] 第{rno}レースを取得中...")
+            print(f"▶ 第{rno}R 取得試行...")
             try:
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_result(d=current_date, stadium=TARGET_JCD, race=rno)
+                print(f"  成功: 第{rno}R")
             except Exception as e:
-                print(f"  ⚠️ データ取得エラー・スキップ: {e}")
+                print(f"  ⚠️ スキップ: {e}")
                 continue
             
             if not odds_info or not race_info:
-                print(f"  ℹ️ 第{rno}Rのデータが存在しません（開催なし等）。")
+                print(f"  ℹ️ データなし")
                 continue
             
             scored_bets = []
@@ -95,7 +103,6 @@ def run_backtest_for_period(start_date, end_date, weights):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    
                     l3, st, cr, kim = get_factor_score(boat_data, assigned_course)
                     total_l3 += l3
                     total_st += st
@@ -108,11 +115,7 @@ def run_backtest_for_period(start_date, end_date, weights):
                 avg_kim = total_kim / 3
                 
                 score = calculate_score(odds_val, avg_l3, avg_st, avg_cr, avg_kim, weights)
-                scored_bets.append({
-                    'combo': combo,
-                    'odds': odds_val,
-                    'score': score,
-                })
+                scored_bets.append({'combo': combo, 'odds': odds_val, 'score': score})
             
             if not scored_bets:
                 continue
@@ -125,12 +128,12 @@ def run_backtest_for_period(start_date, end_date, weights):
                 actual_win = result_info["trifecta"]
                 if actual_win == top_bet['combo']:
                     status = "win"
-                    print(f"  🎉 的中！ 第{rno}R: 予想={top_bet['combo']}, 結果={actual_win}")
+                    print(f"    🎉 的中: {top_bet['combo']}")
                 else:
                     status = "lose"
-                    print(f"  ❌ 不的中 第{rno}R: 予想={top_bet['combo']}, 結果={actual_win}")
+                    print(f"    ❌ 不的中: 予想={top_bet['combo']}, 結果={actual_win}")
             else:
-                print(f"  ⏳ 結果未確定 第{rno}R: 予想={top_bet['combo']}")
+                print(f"    ⏳ 未確定: {top_bet['combo']}")
             
             history = load_history()
             existing = next((h for h in history if h["date"] == str(current_date) and h["stadium"] == TARGET_JCD and h["rno"] == rno), None)
@@ -154,6 +157,7 @@ def run_backtest_for_period(start_date, end_date, weights):
         current_date += timedelta(days=1)
 
 if __name__ == "__main__":
+    print("🚀 [4/5] メイン処理開始")
     default_weights = {
         'local_3ren': 0.7,
         'st': 180,
@@ -166,3 +170,5 @@ if __name__ == "__main__":
     end_d = date(2026, 7, 30)
     
     run_backtest_for_period(start_d, end_d, default_weights)
+    print("🚀 [5/5] すべて完了")
+
