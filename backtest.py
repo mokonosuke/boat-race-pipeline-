@@ -7,6 +7,7 @@ print("🚀 [1/4] 最適化スクリプト開始")
 import os
 from datetime import date, timedelta
 import json
+import re
 import itertools
 import requests
 
@@ -48,11 +49,38 @@ def calculate_score(odds_val, avg_local_3ren, avg_st, avg_course, avg_kimarite, 
     score += odds_val * weights['odds']
     return score
 
+def extract_trifecta_result(result_data):
+    """結果データの中から '1-2-3' のような三連単の組み合わせを自動的に探す"""
+    if not result_data:
+        return None
+    
+    if isinstance(result_data, dict):
+        for k, v in result_data.items():
+            if isinstance(v, str) and re.match(r'^[1-6]-[1-6]-[1-6]$', v.strip()):
+                return v.strip()
+            if isinstance(v, (dict, list)):
+                res = extract_trifecta_result(v)
+                if res:
+                    return res
+    elif isinstance(result_data, (list, tuple)):
+        for item in result_data:
+            res = extract_trifecta_result(item)
+            if res:
+                return res
+    elif isinstance(result_data, str):
+        match = re.search(r'([1-6]-[1-6]-[1-6])', result_data)
+        if match:
+            return match.group(1)
+            
+    return None
+
 def fetch_and_cache_races(start_date, end_date):
+    # キャッシュをクリアして確実に最新の抽出ロジックで再構築する
     if os.path.exists(CACHE_FILE):
-        print("📂 既存のレースキャッシュを読み込みます...")
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            os.remove(CACHE_FILE)
+        except Exception:
+            pass
 
     print("🚀 APIからデータを取得してキャッシュを作成します...")
     try:
@@ -79,10 +107,7 @@ def fetch_and_cache_races(start_date, end_date):
             if not odds_info or not race_info or not result_info:
                 continue
             
-            # 三連単結果の抽出
-            actual_win = None
-            if isinstance(result_info, dict):
-                actual_win = result_info.get("trifecta") or result_info.get("3rentan") or result_info.get("result")
+            actual_win = extract_trifecta_result(result_info)
             if not actual_win:
                 continue
 
@@ -205,7 +230,7 @@ if __name__ == "__main__":
     if result:
         best_w, best_rec, stats, total_r = result
         summary_text = (
-            f"🎯 **【重み最適化結果】**\n"
+            f"🎯 **【重み最適化結果（修正版）】**\n"
             f"・検証レース数: {total_r}\n"
             f"・最高回収率: **{best_rec:.2f}%**\n"
             f"・的中数 / 的中率: {stats['hits']}件 ({stats['hit_rate']:.2f}%)\n"
