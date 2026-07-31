@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 機械学習パイプライン開始")
+print("🚀 [1/5] 拡張機械学習パイプライン開始")
 
 import os
 from datetime import date, timedelta
@@ -25,16 +25,20 @@ WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TARGET_JCD = 11  # びわこ競走場
 
 def get_factor_score(boat_data, assigned_course):
-    # 基本指標
+    # 1. 基本・コース・ハードウェア指標
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
     course_key = f"course_{assigned_course}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
-    
-    # 追加の特徴量（モーター・ボート性能）
     motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
     boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
     
+    # 2. 選手ランク（A1〜B2）の数値化スコア
+    rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
+    rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
+    racer_rank_score = rank_map.get(rank_str, 2.0)
+    
+    # 3. 決まり手スコア
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
         kimarite_score = 45.0
@@ -45,7 +49,7 @@ def get_factor_score(boat_data, assigned_course):
     else:
         kimarite_score = 35.0
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate
+    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score
 
 def extract_trifecta_result(result_data):
     if not result_data:
@@ -109,18 +113,19 @@ def fetch_recent_races(start_date, end_date):
                 except (ValueError, TypeError):
                     continue
                 
-                total_l3, total_st, total_cr, total_kim, total_motor, total_boat = 0, 0, 0, 0, 0, 0
+                total_l3, total_st, total_cr, total_kim, total_motor, total_boat, total_rank = 0, 0, 0, 0, 0, 0, 0
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    l3, st, cr, kim, mot, bot = get_factor_score(boat_data, assigned_course)
+                    l3, st, cr, kim, mot, bot, rnk = get_factor_score(boat_data, assigned_course)
                     total_l3 += l3
                     total_st += st
                     total_cr += cr
                     total_kim += kim
                     total_motor += mot
                     total_boat += bot
+                    total_rank += rnk
                 
                 race_combos.append({
                     'combo': combo,
@@ -130,7 +135,8 @@ def fetch_recent_races(start_date, end_date):
                     'avg_cr': total_cr / 3,
                     'avg_kim': total_kim / 3,
                     'avg_motor': total_motor / 3,
-                    'avg_boat': total_boat / 3
+                    'avg_boat': total_boat / 3,
+                    'avg_rank': total_rank / 3
                 })
             
             if race_combos:
@@ -147,7 +153,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_backtest_ml(cache_data):
-    print("🤖 [3/5] 機械学習モデルの訓練とバックテストを実行中...")
+    print("🤖 [3/5] チューニング済み機械学習モデルの訓練とバックテストを実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -165,6 +171,7 @@ def run_backtest_ml(cache_data):
                 'kimarite': bet['avg_kim'],
                 'motor': bet['avg_motor'],
                 'boat': bet['avg_boat'],
+                'racer_rank': bet['avg_rank'],
                 'is_win': 1 if bet['combo'] == actual_win else 0,
                 'actual_win': actual_win
             })
@@ -174,8 +181,8 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    # 特徴量リストにモーターとボートを追加
-    features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'odds']
+    # 特徴量リストに選手ランクを追加
+    features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
     X = df[features]
     y = df['is_win']
     
@@ -183,7 +190,16 @@ def run_backtest_ml(cache_data):
         X, y, df, test_size=0.2, random_state=42
     )
     
-    model = lgb.LGBMClassifier(random_state=42, verbose=-1)
+    # 過学習を防ぐためのハイパーパラメータ調整
+    model = lgb.LGBMClassifier(
+        n_estimators=120,
+        max_depth=4,
+        learning_rate=0.03,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        verbose=-1
+    )
     model.fit(X_train, y_train)
     
     df_test = df_test.copy()
@@ -196,10 +212,16 @@ def run_backtest_ml(cache_data):
     
     grouped = df_test.groupby(['date', 'rno'])
     for _, group in grouped:
+        # オッズフィルタリング（極端な低オッズや超大穴を避け、回収率を高めるスイートスポットを狙う）
+        filtered_group = group[(group['odds'] >= 5.0) & (group['odds'] <= 60.0)]
+        
+        if len(filtered_group) == 0:
+            continue  # 条件に合う買い目がなければこのレースはパス
+            
         total_races += 1
         total_investment += 100
         
-        best_bet = group.loc[group['pred_prob'].idxmax()]
+        best_bet = filtered_group.loc[filtered_group['pred_prob'].idxmax()]
         
         if best_bet['combo'] == best_bet['actual_win']:
             hit_count += 1
@@ -221,7 +243,7 @@ def run_backtest_ml(cache_data):
     return results
 
 if __name__ == "__main__":
-    # 期間を直近14日間に拡大（必要に応じて日数を変更可能）
+    # 検証期間を直近14日間に設定（必要に応じて30日などに変更可能）
     end_d = date.today() - timedelta(days=1)
     start_d = end_d - timedelta(days=14)
     
@@ -230,9 +252,9 @@ if __name__ == "__main__":
     
     if results:
         summary_text = (
-            f"🎯 **【LightGBM 拡張版定期実行結果】**\n"
+            f"🎯 **【LightGBM フルタチューニング版実行結果】**\n"
             f"・検証対象期間: {start_d} 〜 {end_d}\n"
-            f"・検証レース数: {results['total_races']}件\n"
+            f"・有効投票レース数: {results['total_races']}件\n"
             f"・回収率: **{results['roi']}%**\n"
             f"・的中数 / 的中率: {results['hit_count']}件 ({results['hit_rate']:.2f}%)\n"
             f"・総投資 / 払戻: {results['total_investment']}円 → {results['total_payout']}円"
