@@ -153,6 +153,8 @@ def run_backtest_ml(cache_data):
         actual_win = race['actual_win']
         for bet in race['combos']:
             dataset.append({
+                'date': race['date'],
+                'rno': race['rno'],
                 'race_id': race_idx,
                 'combo': bet['combo'],
                 'odds': bet['odds'],
