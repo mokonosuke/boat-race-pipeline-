@@ -1,7 +1,3 @@
-import pandas as pd
-import numpy as np
-import requests
-from lightgbm import LGBMClassifier
 import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
@@ -72,9 +68,7 @@ def fetch_training_data(start_date, end_date):
     cache_data = []
     current_date = start_date
     
-    # 代表的な会場や全会場の過去データ（ここでは効率のため主要なびわこ等、あるいはループで収集）
-    # ※全会場から集める場合は TARGET_JCDS = range(1, 25) をループ
-    for jcd in [11]: # まずはモデルの土台として
+    for jcd in [11]: 
         while current_date <= end_date:
             for rno in range(1, 13):
                 try:
@@ -128,7 +122,7 @@ def train_model(cache_data):
             })
     df = pd.DataFrame(dataset)
     features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
-    model = LGBMClassifier(n_estimators=120, max_depth=4, learning_rate=0.03, subsample=0.8, colsample_bytree=0.8, random_state=42, verbose=-1)
+    model = lgb.LGBMClassifier(n_estimators=120, max_depth=4, learning_rate=0.03, subsample=0.8, colsample_bytree=0.8, random_state=42, verbose=-1)
     model.fit(df[features], df['is_win'])
     return model, features
 
@@ -140,23 +134,22 @@ def get_today_target_races(target_date):
     # 全24会場をチェック
     for jcd in range(1, 25):
         try:
-            # 1Rの情報から開催タイトルを取得
             race_info_1r = boatrace.get_race_info(d=target_date, stadium=jcd, race=1)
             if not race_info_1r:
                 continue
             
-            # レース情報の中にタイトルやグレード情報が含まれているか確認
-            # （実装環境の構造に合わせてタイトル文字列を抽出）
-            race_title = str(race_info_1r) 
+            # 辞書の値全体を結合してキーワード検索にヒットしやすくする
+            if isinstance(race_info_1r, dict):
+                race_title = " ".join([str(v) for v in race_info_1r.values() if v is not None])
+            else:
+                race_title = str(race_info_1r)
             
-            # キーワード判定
             is_matched = any(kw in race_title for kw in TARGET_KEYWORDS)
             if not is_matched:
                 continue
                 
-            print(f"✨ 対象会場を発見 (JCD: {jcd})")
+            print(f"✨ 対象会場を発見 (JCD: {jcd}) - 判定テキスト: {race_title[:30]}...")
             
-            # 該当会場の1〜12Rを収集
             for rno in range(1, 13):
                 try:
                     odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=jcd, race=rno)
@@ -165,7 +158,7 @@ def get_today_target_races(target_date):
                     continue
                 
                 if not odds_info or not race_info:
-                    continue # まだオッズが出ていない場合はスキップ
+                    continue
                 
                 race_combos = []
                 for combo, odds in odds_info.items():
@@ -197,11 +190,9 @@ def get_today_target_races(target_date):
 if __name__ == "__main__":
     today = date.today()
     
-    # 1. 過去データでAIを訓練
     training_data = fetch_training_data(today - timedelta(days=15), today - timedelta(days=1))
     model, features = train_model(training_data)
     
-    # 2. 本日の対象会場・レースのオッズを取得
     today_races = get_today_target_races(today)
     
     predictions = []
@@ -211,7 +202,6 @@ if __name__ == "__main__":
         
         df_race['pred_prob'] = model.predict_proba(df_race[features])[:, 1]
         
-        # 5倍〜60倍のオッズフィルタ
         filtered = df_race[(df_race['odds'] >= 5.0) & (df_race['odds'] <= 60.0)]
         if len(filtered) == 0: continue
         
@@ -224,7 +214,6 @@ if __name__ == "__main__":
             'prob': best['pred_prob'] * 100
         })
     
-    # 3. Discordへ通知
     if predictions:
         lines = [f"・会場JCD:{p['stadium']} 第{p['rno']}R: **{p['combo']}** (オッズ: {p['odds']}倍 / 期待度: {p['prob']:.1f}%)" for p in predictions]
         msg = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n" + "\n".join(lines)
@@ -234,4 +223,3 @@ if __name__ == "__main__":
     print(msg)
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json={"content": msg})
-
