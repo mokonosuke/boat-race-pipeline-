@@ -1,29 +1,31 @@
-name: Run Boat Race Pipeline
+name: Boat Race Prediction Automation
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 毎日UTC 0:00（日本時間 朝9:00）に自動実行
+    - cron: '0 0 * * *'  # 日本時間 9:00 に実行 (UTC 0:00)
+    - cron: '0 6 * * *'  # 日本時間 15:00 に実行 (UTC 6:00)
+  workflow_dispatch:      # GitHubの画面から手動でも実行できるようにする設定
 
 jobs:
-  run-backtest:
+  run-prediction:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyjpboatrace requests lightgbm scikit-learn pandas numpy
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Run Python script
-        run: python -u optimize.py
+      - name: Run prediction script
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python predict_today.py
