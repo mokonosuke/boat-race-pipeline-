@@ -10,10 +10,15 @@ import lightgbm as lgb
 import requests
 
 from pyjpboatrace import PyJPBoatrace
-from pyjpboatrace.const import STADIUMS_MAP
 
-# 整数JCDから会場名への逆引き用辞書
-NAME_TO_JCD = {v: k for k, v in STADIUMS_MAP.items()}
+# 24場の会場名から整数JCDへのマッピング辞書
+NAME_TO_JCD = {
+    "桐生": 1, "戸田": 2, "江戸川": 3, "平和島": 4, "多摩川": 5,
+    "浜名湖": 6, "蒲郡": 7, "常滑": 8, "津": 9, "三国": 10,
+    "びわこ": 11, "住之江": 12, "尼崎": 13, "鳴門": 14, "丸亀": 15,
+    "児島": 16, "宮島": 17, "徳山": 18, "下関": 19, "若松": 20,
+    "芦屋": 21, "福岡": 22, "唐津": 23, "大村": 24
+}
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
@@ -152,7 +157,6 @@ def get_today_target_races(target_date):
         title = str(info.get('title', ''))
         grades = [str(g).lower() for g in info.get('grade', [])]
         
-        # タイトルまたはグレードにキーワードが含まれるか判定
         combined_text = f"{stadium_name} {title} {' '.join(grades)}"
         is_matched = any(kw.lower() in combined_text.lower() for kw in TARGET_KEYWORDS) or any(g in ['sg', 'g1', 'pg1'] for g in grades)
         
@@ -232,4 +236,3 @@ if __name__ == "__main__":
     print(msg)
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json={"content": msg})
-
