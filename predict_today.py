@@ -214,21 +214,25 @@ if __name__ == "__main__":
     predictions = []
     for race in today_races:
         df_race = pd.DataFrame(race['combos'])
-        if len(df_race) == 0: continue
+        if len(df_race) == 0:
+            continue
         
         df_race['pred_prob'] = model.predict_proba(df_race[features])[:, 1]
         
         filtered = df_race[(df_race['odds'] >= 5.0) & (df_race['odds'] <= 60.0)]
-        if len(filtered) == 0: continue
+        if len(filtered) == 0:
+            continue
         
-        best = filtered.loc[filtered['pred_prob'].idxmax()]
-        predictions.append({
-            'stadium': race['stadium'],
-            'rno': race['rno'],
-            'combo': best['combo'],
-            'odds': best['odds'],
-            'prob': best['pred_prob'] * 100
-        })
+        top_n = filtered.sort_values(by='pred_prob', ascending=False).head(3)
+        
+        for _, best in top_n.iterrows():
+            predictions.append({
+                'stadium': race['stadium'],
+                'rno': race['rno'],
+                'combo': best['combo'],
+                'odds': best['odds'],
+                'prob': best['pred_prob'] * 100
+            })
     
     if predictions:
         lines = []
