@@ -10,11 +10,15 @@ import lightgbm as lgb
 import requests
 
 from pyjpboatrace import PyJPBoatrace
+from pyjpboatrace.const import STADIUMS_MAP
+
+# 整数JCDから会場名への逆引き用辞書
+NAME_TO_JCD = {v: k for k, v in STADIUMS_MAP.items()}
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
-# 狙いたいレースのキーワード（タイトルに含まれる判定用）
-TARGET_KEYWORDS = ["SG", "G1", "ヴィーナス", "レディース", "プレミアムGI"]
+# 狙いたいレースのキーワード（タイトルやグレードに含まれる判定用）
+TARGET_KEYWORDS = ["SG", "G1", "ヴィーナス", "レディース", "プレミアムGI", "オールレディース"]
 
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
@@ -127,64 +131,69 @@ def train_model(cache_data):
     return model, features
 
 def get_today_target_races(target_date):
-    print(f"🎯 本日({target_date})の開催レースから、対象グレード（SG/G1/ヴィーナス等）を探索中...")
+    print(f"🎯 本日({target_date})の開催スケジュールから、対象グレードを探索中...")
     boatrace = PyJPBoatrace()
     target_races = []
     
-    # 全24会場をチェック
-    for jcd in range(1, 25):
-        try:
-            race_info_1r = boatrace.get_race_info(d=target_date, stadium=jcd, race=1)
-            if not race_info_1r:
-                continue
-            
-            # 辞書の値全体を結合してキーワード検索にヒットしやすくする
-            if isinstance(race_info_1r, dict):
-                race_title = " ".join([str(v) for v in race_info_1r.values() if v is not None])
-            else:
-                race_title = str(race_info_1r)
-            
-            is_matched = any(kw in race_title for kw in TARGET_KEYWORDS)
-            if not is_matched:
-                continue
-                
-            print(f"✨ 対象会場を発見 (JCD: {jcd}) - 判定テキスト: {race_title[:30]}...")
-            
-            for rno in range(1, 13):
-                try:
-                    odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=jcd, race=rno)
-                    race_info = boatrace.get_race_info(d=target_date, stadium=jcd, race=rno)
-                except Exception:
-                    continue
-                
-                if not odds_info or not race_info:
-                    continue
-                
-                race_combos = []
-                for combo, odds in odds_info.items():
-                    if not isinstance(combo, str) or '-' not in combo:
-                        continue
-                    try:
-                        boats = [int(b) for b in combo.split('-')]
-                        odds_val = float(odds)
-                    except (ValueError, TypeError):
-                        continue
-                    
-                    t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
-                    for idx, b in enumerate(boats):
-                        l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), idx + 1)
-                        t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
-                    
-                    race_combos.append({
-                        'combo': combo, 'odds': odds_val,
-                        'local_3ren': t_l3/3, 'st': t_st/3, 'course': t_cr/3,
-                        'kimarite': t_kim/3, 'motor': t_mot/3, 'boat': t_bot/3, 'racer_rank': t_rnk/3
-                    })
-                if race_combos:
-                    target_races.append({'stadium': jcd, 'rno': rno, 'combos': race_combos})
-        except Exception:
+    try:
+        stadiums_info = boatrace.get_stadiums(target_date)
+    except Exception as e:
+        print(f"⚠️ 開催会場一覧の取得に失敗しました: {e}")
+        return []
+    
+    for stadium_name, info in stadiums_info.items():
+        if stadium_name == 'date' or not isinstance(info, dict):
             continue
             
+        jcd = NAME_TO_JCD.get(stadium_name)
+        if not jcd:
+            continue
+            
+        title = str(info.get('title', ''))
+        grades = [str(g).lower() for g in info.get('grade', [])]
+        
+        # タイトルまたはグレードにキーワードが含まれるか判定
+        combined_text = f"{stadium_name} {title} {' '.join(grades)}"
+        is_matched = any(kw.lower() in combined_text.lower() for kw in TARGET_KEYWORDS) or any(g in ['sg', 'g1', 'pg1'] for g in grades)
+        
+        if not is_matched:
+            continue
+            
+        print(f"✨ 対象会場を発見: {stadium_name} (JCD: {jcd}) - タイトル: {title}")
+        
+        for rno in range(1, 13):
+            try:
+                odds_info = boatrace.get_odds_trifecta(d=target_date, stadium=jcd, race=rno)
+                race_info = boatrace.get_race_info(d=target_date, stadium=jcd, race=rno)
+            except Exception:
+                continue
+            
+            if not odds_info or not race_info:
+                continue
+            
+            race_combos = []
+            for combo, odds in odds_info.items():
+                if not isinstance(combo, str) or '-' not in combo:
+                    continue
+                try:
+                    boats = [int(b) for b in combo.split('-')]
+                    odds_val = float(odds)
+                except (ValueError, TypeError):
+                    continue
+                
+                t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
+                for idx, b in enumerate(boats):
+                    l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), idx + 1)
+                    t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
+                
+                race_combos.append({
+                    'combo': combo, 'odds': odds_val,
+                    'local_3ren': t_l3/3, 'st': t_st/3, 'course': t_cr/3,
+                    'kimarite': t_kim/3, 'motor': t_mot/3, 'boat': t_bot/3, 'racer_rank': t_rnk/3
+                })
+            if race_combos:
+                target_races.append({'stadium': jcd, 'rno': rno, 'combos': race_combos})
+                
     return target_races
 
 if __name__ == "__main__":
@@ -223,3 +232,4 @@ if __name__ == "__main__":
     print(msg)
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json={"content": msg})
+
