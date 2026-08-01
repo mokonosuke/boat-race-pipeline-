@@ -20,6 +20,9 @@ NAME_TO_JCD = {
     "芦屋": 21, "福岡": 22, "唐津": 23, "大村": 24
 }
 
+# JCDから会場名への逆引き辞書を作成
+JCD_TO_NAME = {v: k for k, v in NAME_TO_JCD.items()}
+
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 # 狙いたいレースのキーワード（タイトルやグレードに含まれる判定用）
@@ -228,7 +231,10 @@ if __name__ == "__main__":
         })
     
     if predictions:
-        lines = [f"・会場JCD:{p['stadium']} 第{p['rno']}R: **{p['combo']}** (オッズ: {p['odds']}倍 / 期待度: {p['prob']:.1f}%)" for p in predictions]
+        lines = []
+        for p in predictions:
+            stadium_name = JCD_TO_NAME.get(p['stadium'], f"会場:{p['stadium']}")
+            lines.append(f"・{stadium_name} 第{p['rno']}R: **{p['combo']}** (オッズ: {p['odds']}倍 / 期待度: {p['prob']:.1f}%)")
         msg = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n" + "\n".join(lines)
     else:
         msg = f"🎯 **【本日のAI買い目配信】** ({today})\n本日は条件に一致する推奨レースはありませんでした（またはオッズ未確定）。"
@@ -236,3 +242,4 @@ if __name__ == "__main__":
     print(msg)
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json={"content": msg})
+
