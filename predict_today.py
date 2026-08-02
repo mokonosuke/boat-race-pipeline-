@@ -206,7 +206,8 @@ def get_today_target_races(target_date):
 if __name__ == "__main__":
     today = date.today()
     
-    training_data = fetch_training_data(today - timedelta(days=15), today - timedelta(days=1))
+    # 過去5日間に変更
+    training_data = fetch_training_data(today - timedelta(days=5), today - timedelta(days=1))
     model, features = train_model(training_data)
     
     today_races = get_today_target_races(today)
@@ -246,4 +247,3 @@ if __name__ == "__main__":
     print(msg)
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json={"content": msg})
-
