@@ -206,7 +206,6 @@ def get_today_target_races(target_date):
 if __name__ == "__main__":
     today = date.today()
     
-    # 過去5日間に変更
     training_data = fetch_training_data(today - timedelta(days=5), today - timedelta(days=1))
     model, features = train_model(training_data)
     
@@ -240,10 +239,24 @@ if __name__ == "__main__":
         for p in predictions:
             stadium_name = JCD_TO_NAME.get(p['stadium'], f"会場:{p['stadium']}")
             lines.append(f"・{stadium_name} 第{p['rno']}R: **{p['combo']}** (オッズ: {p['odds']}倍 / 期待度: {p['prob']:.1f}%)")
-        msg = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n" + "\n".join(lines)
+        
+        # 2000文字制限回避のため分割送信
+        header = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n"
+        current_msg = header
+        for line in lines:
+            if len(current_msg) + len(line) + 1 > 1900:
+                print(current_msg)
+                if WEBHOOK_URL:
+                    requests.post(WEBHOOK_URL, json={"content": current_msg})
+                current_msg = line + "\n"
+            else:
+                current_msg += line + "\n"
+        if current_msg:
+            print(current_msg)
+            if WEBHOOK_URL:
+                requests.post(WEBHOOK_URL, json={"content": current_msg})
     else:
         msg = f"🎯 **【本日のAI買い目配信】** ({today})\n本日は条件に一致する推奨レースはありませんでした（またはオッズ未確定）。"
-        
-    print(msg)
-    if WEBHOOK_URL:
-        requests.post(WEBHOOK_URL, json={"content": msg})
+        print(msg)
+        if WEBHOOK_URL:
+            requests.post(WEBHOOK_URL, json={"content": msg})
