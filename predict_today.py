@@ -230,17 +230,25 @@ if __name__ == "__main__":
                 'stadium': race['stadium'],
                 'rno': race['rno'],
                 'combo': best['combo'],
-                'odds': best['odds'],
-                'prob': best['pred_prob'] * 100
+                'odds': best['odds']
             })
     
     if predictions:
-        lines = []
+        # レースごとにグループ化
+        race_dict = {}
         for p in predictions:
-            stadium_name = JCD_TO_NAME.get(p['stadium'], f"会場:{p['stadium']}")
-            lines.append(f"・{stadium_name} 第{p['rno']}R: **{p['combo']}** (オッズ: {p['odds']}倍 / 期待度: {p['prob']:.1f}%)")
+            key = (p['stadium'], p['rno'])
+            if key not in race_dict:
+                race_dict[key] = []
+            race_dict[key].append(f"**{p['combo']}**({p['odds']}倍)")
         
-        # 2000文字制限回避のため分割送信
+        lines = []
+        for (stadium, rno), combos in race_dict.items():
+            stadium_name = JCD_TO_NAME.get(stadium, f"会場:{stadium}")
+            combos_str = "、".join(combos)
+            lines.append(f"・{stadium_name} 第{rno}R: {combos_str}")
+        
+        # 2000文字制限回避のための分割送信処理
         header = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n"
         current_msg = header
         for line in lines:
