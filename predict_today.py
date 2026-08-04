@@ -71,11 +71,10 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_training_data(start_date, end_date):
-    print("📚 モデル訓練用の過去データを収集中（全24場）...")
+    print("📚 ランキング学習用の過去データを収集中（全24場）...")
     boatrace = PyJPBoatrace()
     cache_data = []
     
-    # 全24場（1〜24）をループしてデータを収集
     for jcd in range(1, 25):
         current_date = start_date
         while current_date <= end_date:
@@ -105,7 +104,6 @@ def fetch_training_data(start_date, end_date):
                     
                     t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
                     for b in boats:
-                        # 修正：着順ではなく艇番b（枠番）をコースとして渡す
                         l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), b)
                         t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
                     
@@ -120,20 +118,42 @@ def fetch_training_data(start_date, end_date):
     return cache_data
 
 def train_model(cache_data):
-    print("🤖 AIモデルを訓練中...")
+    print("🤖 ランキング学習モデル（LambdaRank）を訓練中...")
     dataset = []
+    group_sizes = []
+    
     for race in cache_data:
-        for bet in race['combos']:
+        race_combos = race['combos']
+        group_sizes.append(len(race_combos))
+        for bet in race_combos:
             dataset.append({
                 'local_3ren': bet['avg_l3'], 'st': bet['avg_st'], 'course': bet['avg_cr'],
                 'kimarite': bet['avg_kim'], 'motor': bet['avg_motor'], 'boat': bet['avg_boat'],
                 'racer_rank': bet['avg_rank'], 'odds': bet['odds'],
-                'is_win': 1 if bet['combo'] == race['actual_win'] else 0
+                'relevance': 1 if bet['combo'] == race['actual_win'] else 0
             })
+            
     df = pd.DataFrame(dataset)
     features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
-    model = lgb.LGBMClassifier(n_estimators=120, max_depth=4, learning_rate=0.03, subsample=0.8, colsample_bytree=0.8, random_state=42, verbose=-1)
-    model.fit(df[features], df['is_win'])
+    
+    # LGBMRankerを使用し、objectiveにlambdarankを指定
+    model = lgb.LGBMRanker(
+        objective='lambdarank',
+        n_estimators=120,
+        max_depth=4,
+        learning_rate=0.03,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        verbose=-1
+    )
+    
+    # 学習時にgroup（各レースの組み合わせ数）を渡す
+    model.fit(
+        df[features], 
+        df['relevance'], 
+        group=group_sizes
+    )
     return model, features
 
 def get_today_target_races(target_date):
@@ -188,7 +208,6 @@ def get_today_target_races(target_date):
                 
                 t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
                 for b in boats:
-                    # 修正：艇番bを渡す
                     l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), b)
                     t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
                 
@@ -205,7 +224,6 @@ def get_today_target_races(target_date):
 if __name__ == "__main__":
     today = date.today()
     
-    # 訓練データを全24場・過去5日間に拡大
     training_data = fetch_training_data(today - timedelta(days=5), today - timedelta(days=1))
     model, features = train_model(training_data)
     
@@ -217,13 +235,14 @@ if __name__ == "__main__":
         if len(df_race) == 0:
             continue
         
-        df_race['pred_prob'] = model.predict_proba(df_race[features])[:, 1]
+        # Rankerモデルによるスコア予測（値が大きいほど上位）
+        df_race['pred_score'] = model.predict(df_race[features])
         
         filtered = df_race[(df_race['odds'] >= 5.0) & (df_race['odds'] <= 60.0)]
         if len(filtered) == 0:
             continue
         
-        top_n = filtered.sort_values(by='pred_prob', ascending=False).head(3)
+        top_n = filtered.sort_values(by='pred_score', ascending=False).head(3)
         
         for _, best in top_n.iterrows():
             predictions.append({
