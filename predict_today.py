@@ -20,18 +20,14 @@ NAME_TO_JCD = {
     "芦屋": 21, "福岡": 22, "唐津": 23, "大村": 24
 }
 
-# JCDから会場名への逆引き辞書を作成
 JCD_TO_NAME = {v: k for k, v in NAME_TO_JCD.items()}
-
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-
-# 狙いたいレースのキーワード（タイトルやグレードに含まれる判定用）
 TARGET_KEYWORDS = ["SG", "G1", "ヴィーナス", "レディース", "プレミアムGI", "オールレディース"]
 
-def get_factor_score(boat_data, assigned_course):
+def get_factor_score(boat_data, course_no):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
-    course_key = f"course_{assigned_course}_2nd_rate"
+    course_key = f"course_{course_no}_2nd_rate"
     course_record_score = float(boat_data.get(course_key, 30.0))
     motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
     boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
@@ -41,11 +37,11 @@ def get_factor_score(boat_data, assigned_course):
     racer_rank_score = rank_map.get(rank_str, 2.0)
     
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
-    if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
+    if kimarite_type in ['makuri', 'tsuki_makuri'] and course_no in [4, 5, 6]:
         kimarite_score = 45.0
-    elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
+    elif kimarite_type == 'sashi' and course_no in [2, 3]:
         kimarite_score = 45.0
-    elif kimarite_type == 'nige' and assigned_course == 1:
+    elif kimarite_type == 'nige' and course_no == 1:
         kimarite_score = 50.0
     else:
         kimarite_score = 35.0
@@ -75,12 +71,13 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_training_data(start_date, end_date):
-    print("📚 モデル訓練用の過去データを収集中...")
+    print("📚 モデル訓練用の過去データを収集中（全24場）...")
     boatrace = PyJPBoatrace()
     cache_data = []
-    current_date = start_date
     
-    for jcd in [11]: 
+    # 全24場（1〜24）をループしてデータを収集
+    for jcd in range(1, 25):
+        current_date = start_date
         while current_date <= end_date:
             for rno in range(1, 13):
                 try:
@@ -107,8 +104,9 @@ def fetch_training_data(start_date, end_date):
                         continue
                     
                     t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
-                    for idx, b in enumerate(boats):
-                        l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), idx + 1)
+                    for b in boats:
+                        # 修正：着順ではなく艇番b（枠番）をコースとして渡す
+                        l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), b)
                         t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
                     
                     race_combos.append({
@@ -189,8 +187,9 @@ def get_today_target_races(target_date):
                     continue
                 
                 t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
-                for idx, b in enumerate(boats):
-                    l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), idx + 1)
+                for b in boats:
+                    # 修正：艇番bを渡す
+                    l3, st, cr, kim, mot, bot, rnk = get_factor_score(race_info.get(f"boat{b}", {}), b)
                     t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
                 
                 race_combos.append({
@@ -206,6 +205,7 @@ def get_today_target_races(target_date):
 if __name__ == "__main__":
     today = date.today()
     
+    # 訓練データを全24場・過去5日間に拡大
     training_data = fetch_training_data(today - timedelta(days=5), today - timedelta(days=1))
     model, features = train_model(training_data)
     
@@ -234,7 +234,6 @@ if __name__ == "__main__":
             })
     
     if predictions:
-        # レースごとにグループ化
         race_dict = {}
         for p in predictions:
             key = (p['stadium'], p['rno'])
@@ -248,7 +247,6 @@ if __name__ == "__main__":
             combos_str = "、".join(combos)
             lines.append(f"・{stadium_name} 第{rno}R: {combos_str}")
         
-        # 2000文字制限回避のための分割送信処理
         header = f"🎯 **【本日のSG/G1/女子戦 AI買い目配信】** ({today})\n"
         current_msg = header
         for line in lines:
