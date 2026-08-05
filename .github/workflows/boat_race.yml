@@ -2,8 +2,19 @@ name: Boat Race Prediction Pipeline
 
 on:
   schedule:
-    - cron: '30 1 * * *'  # 毎日日本時間の午前10:30に実行
+    - cron: '30 1 * * *'  # 毎日日本時間の午前10:30に自動実行
   workflow_dispatch:
+    inputs:
+      stadium:
+        description: '会場名 (例: びわこ, 戸田, 11)'
+        required: true
+        default: 'びわこ'
+        type: string
+      race_no:
+        description: 'レース番号 (1〜12)'
+        required: true
+        default: '1'
+        type: string
 
 jobs:
   prediction:
@@ -33,3 +44,5 @@ jobs:
         run: python predict_today.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          INPUT_STADIUM: ${{ github.event.inputs.stadium }}
+          INPUT_RACE_NO: ${{ github.event.inputs.race_no }}
