@@ -1,8 +1,6 @@
-name: Boat Race Prediction Pipeline
+name: Boat Race Prediction (Fast)
 
 on:
-  schedule:
-    - cron: '30 1 * * *'  # 毎日日本時間の午前10:30に自動実行
   workflow_dispatch:
     inputs:
       stadium:
@@ -33,14 +31,9 @@ jobs:
       - name: 依存ライブラリのインストール
         run: |
           python -m pip install --upgrade pip
-          pip install pandas lightgbm scikit-learn requests pyjpboatrace
+          pip install pandas lightgbm requests pyjpboatrace
 
-      - name: 1. モデルの学習と最適化 (optimize.pyの実行)
-        run: python optimize.py
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-      - name: 2. 本日の予測とDiscord通知 (predict_today.pyの実行)
+      - name: 本日の予測とDiscord通知 (predict_today.pyの実行)
         run: python predict_today.py
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
