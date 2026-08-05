@@ -1,4 +1,5 @@
 pyjpboatrace
 requests
 beautifulsoup4
-
+pandas
+lightgbm
