@@ -1,6 +1,24 @@
 import os
+import requests
 import pandas as pd
 import lightgbm as lgb
+
+# --- Discord通知関数 ---
+def send_discord_notification(message):
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
+        print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
+        return
+    
+    payload = {"content": message}
+    try:
+        response = requests.post(webhook_url, json=payload)
+        if response.status_code in [200, 204]:
+            print("💬 Discord通知を送信しました")
+        else:
+            print(f"⚠️ Discord通知の送信に失敗しました: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"⚠️ Discord通知でエラーが発生しました: {e}")
 
 # --- 天気・風向の数値化関数 ---
 def encode_weather(weather_str):
@@ -54,14 +72,20 @@ def predict_main():
     # model = lgb.Booster(model_file='model.txt')
 
     if target_stadium and target_race_no:
-        print(f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ===")
+        msg = f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ==="
+        print(msg)
+        send_discord_notification(msg)
         # TODO: 特定レースの直前情報（展示タイム等）を含むデータ取得・予測ロジックをここに記述
         
     else:
-        print("=== 【定期実行】 全場の通常予測を開始 ===")
+        msg = "=== 【定期実行】 全場の通常予測を開始 ==="
+        print(msg)
+        send_discord_notification(msg)
         # TODO: 通常の全レース予測ロジックをここに記述
 
-    print("=== 予測・通知パイプライン終了 ===")
+    end_msg = "=== 予測・通知パイプライン終了 ==="
+    print(end_msg)
+    send_discord_notification(end_msg)
 
 if __name__ == '__main__':
     predict_main()
