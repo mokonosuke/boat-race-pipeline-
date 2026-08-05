@@ -32,16 +32,29 @@ FEATURES = [
     'wind_direction',
 ]
 
+# --- 会場名からコードへの変換マップ ---
+STADIUM_MAP = {
+    '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
+    '浜名湖': '06', '蒲郡': '07', '常滑': '08', '津': '09', '三国': '10',
+    'びわこ': '11', '琵琶湖': '11', '住之江': '12', '尼崎': '13', '鳴門': '14',
+    '丸亀': '15', '児島': '16', '宮島': '17', '徳山': '18', '下関': '19',
+    '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
+}
+
 def predict_main():
     # GitHub Actions の環境変数から手動入力値を取得
     target_stadium = os.environ.get('INPUT_STADIUM', '').strip()
     target_race_no = os.environ.get('INPUT_RACE_NO', '').strip()
 
+    # 会場名が入力された場合にコードへ変換（直接コードが入力された場合もそのまま対応）
+    if target_stadium in STADIUM_MAP:
+        target_stadium = STADIUM_MAP[target_stadium]
+
     # 学習済みモデルの読み込み
     # model = lgb.Booster(model_file='model.txt')
 
     if target_stadium and target_race_no:
-        print(f"=== 【手動トリガー】 {target_stadium}場 第{target_race_no}レースの直前予測を開始 ===")
+        print(f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ===")
         # TODO: 特定レースの直前情報（展示タイム等）を含むデータ取得・予測ロジックをここに記述
         
     else:
