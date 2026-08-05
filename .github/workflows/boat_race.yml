@@ -22,9 +22,7 @@ jobs:
       - name: 依存ライブラリのインストール
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          pip install pandas lightgbm scikit-learn requests pyjpboatrace
 
       - name: 1. モデルの学習と最適化 (optimize.pyの実行)
         run: python optimize.py
