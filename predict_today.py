@@ -165,7 +165,7 @@ def predict_main():
     from datetime import date
     today = date.today()
 
-    # 自動判定モード（SG、G1、女子戦を対象にする）
+    # 自動判定モード（または会場名がAUTOの場合）
     if raw_stadium.upper() == 'AUTO' or not raw_stadium:
         try:
             stadiums_info = boatrace.get_stadiums(today)
@@ -193,7 +193,6 @@ def predict_main():
                 
             for stadium_code, s_name, title in target_stadiums:
                 print(f"🔍 対象レース発見: {s_name} ({title})")
-                # 自動実行時はメインとなる後半レース（11R, 12R）を対象にする
                 races_to_run = [11, 12] if target_race_no.upper() == 'AUTO' else [int(target_race_no)]
                 
                 for r_no in races_to_run:
@@ -208,16 +207,19 @@ def predict_main():
     else:
         # 手動指定の場合
         target_stadium = parse_stadium(raw_stadium)
-        if target_stadium and target_race_no:
-            start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{target_race_no}レース ==="
-            print(start_msg)
+        if target_stadium:
+            races_to_run = [11, 12] if target_race_no.upper() == 'AUTO' else [int(target_race_no)]
             
-            if model is not None:
-                prediction_text = run_inference(model, target_stadium, target_race_no)
-            else:
-                prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
+            for r_no in races_to_run:
+                start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{r_no}レース ==="
+                print(start_msg)
                 
-            send_discord_notification(prediction_text)
+                if model is not None:
+                    prediction_text = run_inference(model, target_stadium, r_no)
+                else:
+                    prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
+                    
+                send_discord_notification(prediction_text)
 
 if __name__ == '__main__':
     predict_main()
