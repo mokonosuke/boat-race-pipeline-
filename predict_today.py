@@ -27,7 +27,7 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知でエラーが発生しました: {e}")
 
-# --- 特徴量スコア計算（optimize.pyと共通） ---
+# --- 特徴量スコア計算 ---
 def get_factor_score(boat_data, assigned_course):
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
@@ -63,8 +63,21 @@ STADIUM_MAP = {
 
 FEATURES = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
 
+def parse_stadium(stadium_input):
+    """会場名やコードが混ざっている入力を安全にパースする"""
+    stadium_input = str(stadium_input).strip()
+    if stadium_input.isdigit():
+        return stadium_input.zfill(2)
+    if stadium_input in STADIUM_MAP:
+        return STADIUM_MAP[stadium_input]
+    # "桐生びわこ" のように複数文字列が含まれる場合の対策：最初に見つかった会場を採用
+    for name, code in STADIUM_MAP.items():
+        if name in stadium_input:
+            return code
+    return '11' # デフォルト
+
 def run_inference(model, target_stadium, target_race_no):
-    """当日の実際のレースデータとオッズを取得し、学習済みモデルで推論する"""
+    """当日の実際のレースデータとオッズを取得し、学習済みモデルで推論する（上位3点を返す）"""
     try:
         boatrace = PyJPBoatrace()
         from datetime import date
@@ -130,24 +143,24 @@ def run_inference(model, target_stadium, target_race_no):
         if len(filtered) == 0:
             filtered = df_test
             
-        best_bet = filtered.loc[filtered['pred_prob'].idxmax()]
+        # 予測スコアが高い上位3点を取り出す
+        top_3 = filtered.nlargest(3, 'pred_prob')
         
-        prediction_text = (
-            f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**\n"
-            f"• 推奨買い目: **{best_bet['combo']}** (オッズ: {best_bet['odds']:.1f}倍)\n"
-            f"• 予測スコア: {best_bet['pred_prob']:.4f}"
-        )
-        return prediction_text
+        lines = [f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**"]
+        for _, row in top_3.iterrows():
+            lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
+            
+        return "\n".join(lines)
 
     except Exception as e:
         return f"⚠️ 推論処理中にエラーが発生しました: {e}"
 
 def predict_main():
-    target_stadium = os.environ.get('INPUT_STADIUM', '11').strip()
+    raw_stadium = os.environ.get('INPUT_STADIUM', '11').strip()
     target_race_no = os.environ.get('INPUT_RACE_NO', '1').strip()
 
-    if target_stadium in STADIUM_MAP:
-        target_stadium = STADIUM_MAP[target_stadium]
+    # 安全な会場名パース（結合文字や文字列エラーを防止）
+    target_stadium = parse_stadium(raw_stadium)
 
     model_path = 'model.txt'
     model = None
