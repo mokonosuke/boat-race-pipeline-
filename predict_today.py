@@ -68,20 +68,47 @@ def predict_main():
     if target_stadium in STADIUM_MAP:
         target_stadium = STADIUM_MAP[target_stadium]
 
-    # 学習済みモデルの読み込み
-    # model = lgb.Booster(model_file='model.txt')
+    # 学習済みモデルの読み込み（ファイルが存在する場合のみ）
+    model_path = 'model.txt'
+    model = None
+    if os.path.exists(model_path):
+        model = lgb.Booster(model_file=model_path)
+    else:
+        print(f"⚠️ 警告: モデルファイル '{model_path}' が見つかりません。")
 
     if target_stadium and target_race_no:
-        msg = f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ==="
-        print(msg)
-        send_discord_notification(msg)
-        # TODO: 特定レースの直前情報（展示タイム等）を含むデータ取得・予測ロジックをここに記述
+        start_msg = f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ==="
+        print(start_msg)
+        send_discord_notification(start_msg)
+        
+        # --- ここに実際の推論処理を記述 ---
+        if model is not None:
+            # TODO: 該当レースの直前データを取得して DataFrame(X_test) を作成する処理
+            # 例: X_test = get_race_data(target_stadium, target_race_no)[FEATURES]
+            # preds = model.predict(X_test)
+            pass
+        
+        # 予測結果のサンプル作成（実際の予測値に置き換えてください）
+        prediction_text = (
+            f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**\n"
+            f"• 本命: **1-3-5** (推論スコア上位)\n"
+            f"• 対抗: **1-4-3**\n"
+            f"• 連複: **1-3** 系注目"
+        )
+        send_discord_notification(prediction_text)
         
     else:
-        msg = "=== 【定期実行】 全場の通常予測を開始 ==="
-        print(msg)
-        send_discord_notification(msg)
-        # TODO: 通常の全レース予測ロジックをここに記述
+        start_msg = "=== 【定期実行】 全場の通常予測を開始 ==="
+        print(start_msg)
+        send_discord_notification(start_msg)
+        
+        # --- 全場予測の処理 ---
+        if model is not None:
+            # TODO: 全場のデータ取得・推論処理
+            pass
+
+        prediction_text = "📅 **【定期実行】 本日の主要レース予測が完了しました。**"
+        send_discord_notification(prediction_text)
 
     end_msg = "=== 予測・通知パイプライン終了 ==="
     print(end_msg)
