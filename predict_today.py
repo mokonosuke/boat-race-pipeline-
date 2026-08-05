@@ -1,7 +1,14 @@
 import os
+import re
 import requests
 import pandas as pd
 import lightgbm as lgb
+import sys
+
+try:
+    from pyjpboatrace import PyJPBoatrace
+except Exception as e:
+    print(f"❌ PyJPBoatrace 読み込み失敗: {e}")
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
@@ -20,35 +27,30 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知でエラーが発生しました: {e}")
 
-# --- 天気・風向の数値化関数 ---
-def encode_weather(weather_str):
-    weather_map = {'晴': 1, '曇': 2, '雨': 3, '雪': 4}
-    return weather_map.get(str(weather_str).strip(), 0)
+# --- 特徴量スコア計算（optimize.pyと共通） ---
+def get_factor_score(boat_data, assigned_course):
+    local_3ren = float(boat_data.get('local_in3rd', 0.0))
+    ave_st = float(boat_data.get('aveST', 0.20))
+    course_key = f"course_{assigned_course}_2nd_rate"
+    course_record_score = float(boat_data.get(course_key, 30.0))
+    motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
+    boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
+    
+    rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
+    rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
+    racer_rank_score = rank_map.get(rank_str, 2.0)
+    
+    kimarite_type = boat_data.get('primary_kimarite', 'normal')
+    if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
+        kimarite_score = 45.0
+    elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
+        kimarite_score = 45.0
+    elif kimarite_type == 'nige' and assigned_course == 1:
+        kimarite_score = 50.0
+    else:
+        kimarite_score = 35.0
 
-def encode_wind_direction(wind_str):
-    direction_map = {
-        '北': 1, '北北東': 2, '北東': 3, '東北東': 4,
-        '東': 5, '東南東': 6, '南東': 7, '南南東': 8,
-        '南': 9, '南南西': 10, '南西': 11, '西南西': 12,
-        '西': 13, '西北西': 14, '北西': 15, '北北西': 16
-    }
-    return direction_map.get(str(wind_str).strip(), 0)
-
-# --- 共通の特徴量リスト ---
-FEATURES = [
-    'local_3ren',
-    'st',
-    'course',
-    'motor',
-    'boat',
-    'racer_rank',
-    'air_temp',
-    'water_temp',
-    'wind_speed',
-    'wave_height',
-    'weather',
-    'wind_direction',
-]
+    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score
 
 # --- 会場名からコードへの変換マップ ---
 STADIUM_MAP = {
@@ -59,50 +61,81 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+FEATURES = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
+
 def run_inference(model, target_stadium, target_race_no):
-    """モデルを用いた推論を実行し、Discord用のフォーマット文字列を生成する"""
+    """当日の実際のレースデータとオッズを取得し、学習済みモデルで推論する"""
     try:
-        # TODO: 実際のレースデータ（1〜6号艇分のDataFrame）を取得する処理に置き換えてください
-        # 例: df_test = get_scraped_race_data(target_stadium, target_race_no)
+        boatrace = PyJPBoatrace()
+        from datetime import date
+        today = date.today()
         
-        # サンプル用のダミーデータ（動作確認用）
-        data = {
-            'local_3ren': [0.45, 0.30, 0.60, 0.25, 0.40, 0.20],
-            'st': [0.15, 0.18, 0.12, 0.20, 0.16, 0.22],
-            'course': [1, 2, 3, 4, 5, 6],
-            'motor': [35.5, 40.2, 50.1, 28.4, 33.0, 25.1],
-            'boat': [40.0, 30.0, 45.0, 32.0, 38.0, 29.0],
-            'racer_rank': [1, 2, 1, 3, 2, 3],
-            'air_temp': [22.0, 22.0, 22.0, 22.0, 22.0, 22.0],
-            'water_temp': [20.0, 20.0, 20.0, 20.0, 20.0, 20.0],
-            'wind_speed': [3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
-            'wave_height': [5, 5, 5, 5, 5, 5],
-            'weather': [1, 1, 1, 1, 1, 1],
-            'wind_direction': [2, 2, 2, 2, 2, 2]
-        }
-        df_test = pd.DataFrame(data)
+        stadium_code = int(target_stadium)
+        race_no = int(target_race_no)
         
-        # 特徴量の順序を確実に一致させる
+        odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
+        race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
+        
+        if not odds_info or not race_info:
+            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
+        
+        race_combos = []
+        for combo, odds in odds_info.items():
+            if not isinstance(combo, str) or '-' not in combo:
+                continue
+            try:
+                boats = [int(b) for b in combo.split('-')]
+                odds_val = float(odds)
+            except (ValueError, TypeError):
+                continue
+            
+            total_l3, total_st, total_cr, total_kim, total_motor, total_boat, total_rank = 0, 0, 0, 0, 0, 0, 0
+            for idx, b in enumerate(boats):
+                assigned_course = idx + 1
+                boat_key = f"boat{b}"
+                boat_data = race_info.get(boat_key, {})
+                l3, st, cr, kim, mot, bot, rnk = get_factor_score(boat_data, assigned_course)
+                total_l3 += l3
+                total_st += st
+                total_cr += cr
+                total_kim += kim
+                total_motor += mot
+                total_boat += bot
+                total_rank += rnk
+            
+            race_combos.append({
+                'combo': combo,
+                'odds': odds_val,
+                'local_3ren': total_l3 / 3,
+                'st': total_st / 3,
+                'course': total_cr / 3,
+                'kimarite': total_kim / 3,
+                'motor': total_motor / 3,
+                'boat': total_boat / 3,
+                'racer_rank': total_rank / 3
+            })
+            
+        if not race_combos:
+            return f"⚠️ 有効な買い目データを作成できませんでした。"
+            
+        df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
         
-        # 推論の実行
+        # 予測確率の算出
         preds = model.predict(X_test)
+        df_test['pred_prob'] = preds
         
-        # スコアが高い順に艇をソート
-        df_test['pred_score'] = preds
-        df_test['boat_no'] = range(1, 7)
-        df_sorted = df_test.sort_values(by='pred_score', ascending=False).reset_index(drop=True)
-        
-        first = int(df_sorted.loc[0, 'boat_no'])
-        second = int(df_sorted.loc[1, 'boat_no'])
-        third = int(df_sorted.loc[2, 'boat_no'])
+        # オッズフィルタリング
+        filtered = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 60.0)]
+        if len(filtered) == 0:
+            filtered = df_test
+            
+        best_bet = filtered.loc[filtered['pred_prob'].idxmax()]
         
         prediction_text = (
             f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**\n"
-            f"• 推奨買い目: **{first}-{second}-{third}**\n"
-            f"• 1着有力: **{first}号艇** (スコア: {df_sorted.loc[0, 'pred_score']:.3f})\n"
-            f"• 2着有力: **{second}号艇**\n"
-            f"• 3着有力: **{third}号艇**"
+            f"• 推奨買い目: **{best_bet['combo']}** (オッズ: {best_bet['odds']:.1f}倍)\n"
+            f"• 予測スコア: {best_bet['pred_prob']:.4f}"
         )
         return prediction_text
 
@@ -110,13 +143,12 @@ def run_inference(model, target_stadium, target_race_no):
         return f"⚠️ 推論処理中にエラーが発生しました: {e}"
 
 def predict_main():
-    target_stadium = os.environ.get('INPUT_STADIUM', '').strip()
-    target_race_no = os.environ.get('INPUT_RACE_NO', '').strip()
+    target_stadium = os.environ.get('INPUT_STADIUM', '11').strip()
+    target_race_no = os.environ.get('INPUT_RACE_NO', '1').strip()
 
     if target_stadium in STADIUM_MAP:
         target_stadium = STADIUM_MAP[target_stadium]
 
-    # モデルファイルの読み込み
     model_path = 'model.txt'
     model = None
     if os.path.exists(model_path):
@@ -125,9 +157,8 @@ def predict_main():
         print(f"⚠️ 警告: モデルファイル '{model_path}' が見つかりません。")
 
     if target_stadium and target_race_no:
-        start_msg = f"=== 【手動トリガー】 会場コード:{target_stadium} 第{target_race_no}レースの直前予測を開始 ==="
+        start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{target_race_no}レース ==="
         print(start_msg)
-        send_discord_notification(start_msg)
         
         if model is not None:
             prediction_text = run_inference(model, target_stadium, target_race_no)
@@ -135,19 +166,8 @@ def predict_main():
             prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
             
         send_discord_notification(prediction_text)
-        
     else:
-        start_msg = "=== 【定期実行】 全場の通常予測を開始 ==="
-        print(start_msg)
-        send_discord_notification(start_msg)
-        
-        # 全場予測の処理（必要に応じて拡張）
-        prediction_text = "📅 **【定期実行】 本日の主要レース予測が完了しました。**"
-        send_discord_notification(prediction_text)
-
-    end_msg = "=== 予測・通知パイプライン終了 ==="
-    print(end_msg)
-    send_discord_notification(end_msg)
+        send_discord_notification("📅 **本日の予測処理が完了しました。**")
 
 if __name__ == '__main__':
     predict_main()
