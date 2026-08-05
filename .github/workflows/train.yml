@@ -1,1 +1,32 @@
+name: Daily Model Training
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          
+      - name: Install dependencies
+        run: |
+          pip install pyjpboatrace lightgbm pandas scikit-learn
+          
+      - name: Run training
+        run: |
+          python optimize.py
+          
+      - name: Commit and push model
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update model.txt"
+          file_pattern: model.txt
 
