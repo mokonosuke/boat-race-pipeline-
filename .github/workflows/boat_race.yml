@@ -1,15 +1,22 @@
-name: Boat Race Prediction Automation
+name: Boat Race Prediction
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 日本時間 9:00 に実行 (UTC 0:00)
-    - cron: '0 6 * * *'  # 日本時間 15:00 に実行 (UTC 6:00)
-  workflow_dispatch:      # GitHubの画面から手動でも実行できるようにする設定
+    - cron: '0 0,6 * * *' # 毎日 9:00 と 15:00 (JST) の自動実行
+  workflow_dispatch:
+    inputs:
+      stadium:
+        description: '開催場コード (例: 01〜24。空欄なら全場)'
+        required: false
+        default: ''
+      race_no:
+        description: 'レース番号 (例: 11。空欄なら全レース)'
+        required: false
+        default: ''
 
 jobs:
   run-prediction:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,12 +28,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandas lightgbm requests numpy scikit-learn
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -r requirements.txt
 
       - name: Run prediction script
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          INPUT_STADIUM: ${{ github.event.inputs.stadium }}
+          INPUT_RACE_NO: ${{ github.event.inputs.race_no }}
         run: |
           python predict_today.py
