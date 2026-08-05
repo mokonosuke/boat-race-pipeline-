@@ -181,7 +181,6 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    # 特徴量リストに選手ランクを追加
     features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
     X = df[features]
     y = df['is_win']
@@ -190,7 +189,6 @@ def run_backtest_ml(cache_data):
         X, y, df, test_size=0.2, random_state=42
     )
     
-    # 過学習を防ぐためのハイパーパラメータ調整
     model = lgb.LGBMClassifier(
         n_estimators=120,
         max_depth=4,
@@ -202,6 +200,10 @@ def run_backtest_ml(cache_data):
     )
     model.fit(X_train, y_train)
     
+    # 学習済みモデルの保存処理
+    model.booster_.save_model('model.txt')
+    print("✅ 学習済みモデルを 'model.txt' として保存しました。")
+    
     df_test = df_test.copy()
     df_test['pred_prob'] = model.predict_proba(X_test)[:, 1]
     
@@ -212,11 +214,10 @@ def run_backtest_ml(cache_data):
     
     grouped = df_test.groupby(['date', 'rno'])
     for _, group in grouped:
-        # オッズフィルタリング（極端な低オッズや超大穴を避け、回収率を高めるスイートスポットを狙う）
         filtered_group = group[(group['odds'] >= 5.0) & (group['odds'] <= 60.0)]
         
         if len(filtered_group) == 0:
-            continue  # 条件に合う買い目がなければこのレースはパス
+            continue
             
         total_races += 1
         total_investment += 100
@@ -243,7 +244,6 @@ def run_backtest_ml(cache_data):
     return results
 
 if __name__ == "__main__":
-    # 検証期間を直近14日間に設定（必要に応じて30日などに変更可能）
     end_d = date.today() - timedelta(days=1)
     start_d = end_d - timedelta(days=14)
     
@@ -267,4 +267,3 @@ if __name__ == "__main__":
                 print("✅ Discordへ結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
-
