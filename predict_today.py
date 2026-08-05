@@ -64,17 +64,15 @@ STADIUM_MAP = {
 FEATURES = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
 
 def parse_stadium(stadium_input):
-    """会場名やコードが混ざっている入力を安全にパースする"""
     stadium_input = str(stadium_input).strip()
     if stadium_input.isdigit():
         return stadium_input.zfill(2)
     if stadium_input in STADIUM_MAP:
         return STADIUM_MAP[stadium_input]
-    # "桐生びわこ" のように複数文字列が含まれる場合の対策：最初に見つかった会場を採用
     for name, code in STADIUM_MAP.items():
         if name in stadium_input:
             return code
-    return '11' # デフォルト
+    return '11'
 
 def run_inference(model, target_stadium, target_race_no):
     """当日の実際のレースデータとオッズを取得し、学習済みモデルで推論する（上位3点を返す）"""
@@ -134,16 +132,13 @@ def run_inference(model, target_stadium, target_race_no):
         df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
         
-        # 予測確率の算出
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
-        # オッズフィルタリング
         filtered = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 60.0)]
         if len(filtered) == 0:
             filtered = df_test
             
-        # 予測スコアが高い上位3点を取り出す
         top_3 = filtered.nlargest(3, 'pred_prob')
         
         lines = [f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**"]
@@ -156,11 +151,8 @@ def run_inference(model, target_stadium, target_race_no):
         return f"⚠️ 推論処理中にエラーが発生しました: {e}"
 
 def predict_main():
-    raw_stadium = os.environ.get('INPUT_STADIUM', '11').strip()
-    target_race_no = os.environ.get('INPUT_RACE_NO', '1').strip()
-
-    # 安全な会場名パース（結合文字や文字列エラーを防止）
-    target_stadium = parse_stadium(raw_stadium)
+    raw_stadium = os.environ.get('INPUT_STADIUM', 'AUTO').strip()
+    target_race_no = os.environ.get('INPUT_RACE_NO', 'AUTO').strip()
 
     model_path = 'model.txt'
     model = None
@@ -169,18 +161,63 @@ def predict_main():
     else:
         print(f"⚠️ 警告: モデルファイル '{model_path}' が見つかりません。")
 
-    if target_stadium and target_race_no:
-        start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{target_race_no}レース ==="
-        print(start_msg)
-        
-        if model is not None:
-            prediction_text = run_inference(model, target_stadium, target_race_no)
-        else:
-            prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
+    boatrace = PyJPBoatrace()
+    from datetime import date
+    today = date.today()
+
+    # 自動判定モード（SG、G1、女子戦を対象にする）
+    if raw_stadium.upper() == 'AUTO' or not raw_stadium:
+        try:
+            stadiums_info = boatrace.get_stadiums(today)
+            target_stadiums = []
             
-        send_discord_notification(prediction_text)
+            women_keywords = ['女子', 'レディース', 'ヴィーナス', 'オールレディース', 'クイーンズクライマックス', '男女w']
+            
+            for s_name, info in stadiums_info.items():
+                if s_name == 'date':
+                    continue
+                grade_list = [g.lower() for g in info.get('grade', [])]
+                title = info.get('title', '')
+                
+                is_major = any(g in ['sg', 'g1', 'pg1'] for g in grade_list)
+                is_women = any(kw in title for kw in women_keywords)
+                
+                if is_major or is_women:
+                    code = STADIUM_MAP.get(s_name)
+                    if code:
+                        target_stadiums.append((code, s_name, title))
+            
+            if not target_stadiums:
+                print("ℹ️ 本日開催のSG・G1・女子戦はありません。")
+                return
+                
+            for stadium_code, s_name, title in target_stadiums:
+                print(f"🔍 対象レース発見: {s_name} ({title})")
+                # 自動実行時はメインとなる後半レース（11R, 12R）を対象にする
+                races_to_run = [11, 12] if target_race_no.upper() == 'AUTO' else [int(target_race_no)]
+                
+                for r_no in races_to_run:
+                    if model is not None:
+                        prediction_text = run_inference(model, stadium_code, r_no)
+                        notification = f"📌 **【対象レース】 {s_name} ({title})**\n{prediction_text}"
+                        send_discord_notification(notification)
+                    else:
+                        send_discord_notification("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+        except Exception as e:
+            send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
     else:
-        send_discord_notification("📅 **本日の予測処理が完了しました。**")
+        # 手動指定の場合
+        target_stadium = parse_stadium(raw_stadium)
+        if target_stadium and target_race_no:
+            start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{target_race_no}レース ==="
+            print(start_msg)
+            
+            if model is not None:
+                prediction_text = run_inference(model, target_stadium, target_race_no)
+            else:
+                prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
+                
+            send_discord_notification(prediction_text)
 
 if __name__ == '__main__':
     predict_main()
