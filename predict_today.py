@@ -59,16 +59,64 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+def run_inference(model, target_stadium, target_race_no):
+    """モデルを用いた推論を実行し、Discord用のフォーマット文字列を生成する"""
+    try:
+        # TODO: 実際のレースデータ（1〜6号艇分のDataFrame）を取得する処理に置き換えてください
+        # 例: df_test = get_scraped_race_data(target_stadium, target_race_no)
+        
+        # サンプル用のダミーデータ（動作確認用）
+        data = {
+            'local_3ren': [0.45, 0.30, 0.60, 0.25, 0.40, 0.20],
+            'st': [0.15, 0.18, 0.12, 0.20, 0.16, 0.22],
+            'course': [1, 2, 3, 4, 5, 6],
+            'motor': [35.5, 40.2, 50.1, 28.4, 33.0, 25.1],
+            'boat': [40.0, 30.0, 45.0, 32.0, 38.0, 29.0],
+            'racer_rank': [1, 2, 1, 3, 2, 3],
+            'air_temp': [22.0, 22.0, 22.0, 22.0, 22.0, 22.0],
+            'water_temp': [20.0, 20.0, 20.0, 20.0, 20.0, 20.0],
+            'wind_speed': [3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
+            'wave_height': [5, 5, 5, 5, 5, 5],
+            'weather': [1, 1, 1, 1, 1, 1],
+            'wind_direction': [2, 2, 2, 2, 2, 2]
+        }
+        df_test = pd.DataFrame(data)
+        
+        # 特徴量の順序を確実に一致させる
+        X_test = df_test[FEATURES]
+        
+        # 推論の実行
+        preds = model.predict(X_test)
+        
+        # スコアが高い順に艇をソート
+        df_test['pred_score'] = preds
+        df_test['boat_no'] = range(1, 7)
+        df_sorted = df_test.sort_values(by='pred_score', ascending=False).reset_index(drop=True)
+        
+        first = int(df_sorted.loc[0, 'boat_no'])
+        second = int(df_sorted.loc[1, 'boat_no'])
+        third = int(df_sorted.loc[2, 'boat_no'])
+        
+        prediction_text = (
+            f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**\n"
+            f"• 推奨買い目: **{first}-{second}-{third}**\n"
+            f"• 1着有力: **{first}号艇** (スコア: {df_sorted.loc[0, 'pred_score']:.3f})\n"
+            f"• 2着有力: **{second}号艇**\n"
+            f"• 3着有力: **{third}号艇**"
+        )
+        return prediction_text
+
+    except Exception as e:
+        return f"⚠️ 推論処理中にエラーが発生しました: {e}"
+
 def predict_main():
-    # GitHub Actions の環境変数から手動入力値を取得
     target_stadium = os.environ.get('INPUT_STADIUM', '').strip()
     target_race_no = os.environ.get('INPUT_RACE_NO', '').strip()
 
-    # 会場名が入力された場合にコードへ変換（直接コードが入力された場合もそのまま対応）
     if target_stadium in STADIUM_MAP:
         target_stadium = STADIUM_MAP[target_stadium]
 
-    # 学習済みモデルの読み込み（ファイルが存在する場合のみ）
+    # モデルファイルの読み込み
     model_path = 'model.txt'
     model = None
     if os.path.exists(model_path):
@@ -81,20 +129,11 @@ def predict_main():
         print(start_msg)
         send_discord_notification(start_msg)
         
-        # --- ここに実際の推論処理を記述 ---
         if model is not None:
-            # TODO: 該当レースの直前データを取得して DataFrame(X_test) を作成する処理
-            # 例: X_test = get_race_data(target_stadium, target_race_no)[FEATURES]
-            # preds = model.predict(X_test)
-            pass
-        
-        # 予測結果のサンプル作成（実際の予測値に置き換えてください）
-        prediction_text = (
-            f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**\n"
-            f"• 本命: **1-3-5** (推論スコア上位)\n"
-            f"• 対抗: **1-4-3**\n"
-            f"• 連複: **1-3** 系注目"
-        )
+            prediction_text = run_inference(model, target_stadium, target_race_no)
+        else:
+            prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
+            
         send_discord_notification(prediction_text)
         
     else:
@@ -102,11 +141,7 @@ def predict_main():
         print(start_msg)
         send_discord_notification(start_msg)
         
-        # --- 全場予測の処理 ---
-        if model is not None:
-            # TODO: 全場のデータ取得・推論処理
-            pass
-
+        # 全場予測の処理（必要に応じて拡張）
         prediction_text = "📅 **【定期実行】 本日の主要レース予測が完了しました。**"
         send_discord_notification(prediction_text)
 
