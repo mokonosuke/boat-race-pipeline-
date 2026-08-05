@@ -1,41 +1,38 @@
-name: Boat Race Prediction (Fast)
+name: Boat Race Auto Prediction (SG/G1/Women)
 
 on:
+  schedule:
+    - cron: '0 0,5 * * *' # 日本時間 09:00 と 14:00 に定期実行
   workflow_dispatch:
     inputs:
       stadium:
-        description: '会場名 (例: びわこ, 戸田, 11)'
-        required: true
-        default: 'びわこ'
-        type: string
+        description: '会場名 (空欄またはAUTOで自動判定)'
+        required: false
+        default: 'AUTO'
       race_no:
-        description: 'レース番号 (1〜12)'
-        required: true
-        default: '1'
-        type: string
+        description: 'レース番号 (空欄またはAUTOで自動判定)'
+        required: false
+        default: 'AUTO'
 
 jobs:
-  prediction:
+  predict:
     runs-on: ubuntu-latest
-
     steps:
-      - name: リポジトリのチェックアウト
-        uses: actions/checkout@v4
-
-      - name: Pythonのセットアップ
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: setup-python@v5
         with:
           python-version: '3.10'
-          cache: 'pip'
-
-      - name: 依存ライブラリのインストール
+          
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pandas lightgbm requests pyjpboatrace
-
-      - name: 本日の予測とDiscord通知 (predict_today.pyの実行)
-        run: python predict_today.py
+          pip install pyjpboatrace lightgbm pandas scikit-learn requests
+          
+      - name: Run prediction
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          INPUT_STADIUM: ${{ github.event.inputs.stadium }}
-          INPUT_RACE_NO: ${{ github.event.inputs.race_no }}
+          INPUT_STADIUM: ${{ github.event.inputs.stadium || 'AUTO' }}
+          INPUT_RACE_NO: ${{ github.event.inputs.race_no || 'AUTO' }}
+        run: |
+          python predict.py
