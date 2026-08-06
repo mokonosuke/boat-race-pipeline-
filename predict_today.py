@@ -193,7 +193,8 @@ def predict_main():
                 
             for stadium_code, s_name, title in target_stadiums:
                 print(f"🔍 対象レース発見: {s_name} ({title})")
-                races_to_run = [11, 12] if target_race_no.upper() == 'AUTO' else [int(target_race_no)]
+                # AUTOの場合は1R〜12Rすべてを対象にする
+                races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
                 
                 for r_no in races_to_run:
                     if model is not None:
@@ -208,7 +209,7 @@ def predict_main():
         # 手動指定の場合
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
-            races_to_run = [11, 12] if target_race_no.upper() == 'AUTO' else [int(target_race_no)]
+            races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
             
             for r_no in races_to_run:
                 start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{r_no}レース ==="
