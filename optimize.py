@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 拡張機械学習パイプライン開始")
+print("🚀 [1/5] 拡張機械学習パイプライン開始（風速・風向き対応版）")
 
 import os
 from datetime import date, timedelta
@@ -22,7 +22,7 @@ except Exception as e:
     sys.exit(1)
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-TARGET_JCD = 11  # びわこ競走場
+TARGET_JCD = 11  # びわこ競走場（必要に応じて変更してください）
 
 def get_factor_score(boat_data, assigned_course):
     # 1. 基本・コース・ハードウェア指標
@@ -74,7 +74,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最新データを取得します...")
+    print("🚀 APIから最新データ（気象情報含む）を取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -102,6 +102,25 @@ def fetch_recent_races(start_date, end_date):
             actual_win = extract_trifecta_result(result_info)
             if not actual_win:
                 continue
+
+            # 気象データ（風速・風向き）の抽出
+            wind_speed = 0.0
+            wind_dir = ""
+            try:
+                raw_wind_speed = race_info.get('wind_speed', 0.0)
+                if raw_wind_speed is not None:
+                    wind_speed = float(str(raw_wind_speed).replace('m', '').strip())
+            except Exception:
+                wind_speed = 0.0
+
+            try:
+                wind_dir = str(race_info.get('wind_direction', ''))
+            except Exception:
+                wind_dir = ""
+
+            # フラグ化（向かい風・追い風の判定）
+            is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
+            is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
             race_combos = []
             for combo, odds in odds_info.items():
@@ -136,7 +155,10 @@ def fetch_recent_races(start_date, end_date):
                     'avg_kim': total_kim / 3,
                     'avg_motor': total_motor / 3,
                     'avg_boat': total_boat / 3,
-                    'avg_rank': total_rank / 3
+                    'avg_rank': total_rank / 3,
+                    'wind_speed': wind_speed,
+                    'is_headwind': is_headwind,
+                    'is_tailwind': is_tailwind
                 })
             
             if race_combos:
@@ -153,7 +175,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_backtest_ml(cache_data):
-    print("🤖 [3/5] チューニング済み機械学習モデルの訓練とバックテストを実行中...")
+    print("🤖 [3/5] 気象データ統合モデルの訓練とバックテストを実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -172,6 +194,9 @@ def run_backtest_ml(cache_data):
                 'motor': bet['avg_motor'],
                 'boat': bet['avg_boat'],
                 'racer_rank': bet['avg_rank'],
+                'wind_speed': bet['wind_speed'],
+                'is_headwind': bet['is_headwind'],
+                'is_tailwind': bet['is_tailwind'],
                 'is_win': 1 if bet['combo'] == actual_win else 0,
                 'actual_win': actual_win
             })
@@ -181,7 +206,12 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    features = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
+    # 特徴量に風速・向かい風・追い風を追加
+    features = [
+        'local_3ren', 'st', 'course', 'kimarite', 
+        'motor', 'boat', 'racer_rank', 'odds',
+        'wind_speed', 'is_headwind', 'is_tailwind'
+    ]
     X = df[features]
     y = df['is_win']
     
@@ -200,7 +230,6 @@ def run_backtest_ml(cache_data):
     )
     model.fit(X_train, y_train)
     
-    # 学習済みモデルの保存処理
     model.booster_.save_model('model.txt')
     print("✅ 学習済みモデルを 'model.txt' として保存しました。")
     
@@ -252,7 +281,7 @@ if __name__ == "__main__":
     
     if results:
         summary_text = (
-            f"🎯 **【LightGBM フルタチューニング版実行結果】**\n"
+            f"🎯 **【気象データ統合版実行結果】**\n"
             f"・検証対象期間: {start_d} 〜 {end_d}\n"
             f"・有効投票レース数: {results['total_races']}件\n"
             f"・回収率: **{results['roi']}%**\n"
