@@ -61,7 +61,12 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
-FEATURES = ['local_3ren', 'st', 'course', 'kimarite', 'motor', 'boat', 'racer_rank', 'odds']
+# 学習側と合わせた11個の特徴量
+FEATURES = [
+    'local_3ren', 'st', 'course', 'kimarite', 
+    'motor', 'boat', 'racer_rank', 'odds',
+    'wind_speed', 'is_headwind', 'is_tailwind'
+]
 
 def parse_stadium(stadium_input):
     stadium_input = str(stadium_input).strip()
@@ -90,6 +95,24 @@ def run_inference(model, target_stadium, target_race_no):
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
+        # 気象データ（風速・風向き）の抽出
+        wind_speed = 0.0
+        wind_dir = ""
+        try:
+            raw_wind_speed = race_info.get('wind_speed', 0.0)
+            if raw_wind_speed is not None:
+                wind_speed = float(str(raw_wind_speed).replace('m', '').strip())
+        except Exception:
+            wind_speed = 0.0
+
+        try:
+            wind_dir = str(race_info.get('wind_direction', ''))
+        except Exception:
+            wind_dir = ""
+
+        is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
+        is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
+
         race_combos = []
         for combo, odds in odds_info.items():
             if not isinstance(combo, str) or '-' not in combo:
@@ -123,7 +146,10 @@ def run_inference(model, target_stadium, target_race_no):
                 'kimarite': total_kim / 3,
                 'motor': total_motor / 3,
                 'boat': total_boat / 3,
-                'racer_rank': total_rank / 3
+                'racer_rank': total_rank / 3,
+                'wind_speed': wind_speed,
+                'is_headwind': is_headwind,
+                'is_tailwind': is_tailwind
             })
             
         if not race_combos:
@@ -165,7 +191,6 @@ def predict_main():
     from datetime import date
     today = date.today()
 
-    # 自動判定モード（または会場名がAUTOの場合）
     if raw_stadium.upper() == 'AUTO' or not raw_stadium:
         try:
             stadiums_info = boatrace.get_stadiums(today)
@@ -193,7 +218,6 @@ def predict_main():
                 
             for stadium_code, s_name, title in target_stadiums:
                 print(f"🔍 対象レース発見: {s_name} ({title})")
-                # AUTOの場合は1R〜12Rすべてを対象にする
                 races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
                 
                 for r_no in races_to_run:
@@ -206,7 +230,6 @@ def predict_main():
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
     else:
-        # 手動指定の場合
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
             races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
