@@ -47,6 +47,11 @@ def extract_trifecta_result(result_data):
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
+    # ★朝の自動予測などのサイレントモード時はDiscord通知をスキップする
+    if os.environ.get("SILENT_MODE", "").lower() == "true":
+        print(f"🔇 [サイレントモード] Discord通知をスキップしました")
+        return
+
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -125,7 +130,6 @@ def run_inference(model, target_stadium, target_race_no):
         odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
         
-        # 結果情報はまだ出ていない場合があるため個別で安全に取得
         result_info = None
         try:
             result_info = boatrace.get_race_result(d=today, stadium=stadium_code, race=race_no)
@@ -192,7 +196,6 @@ def run_inference(model, target_stadium, target_race_no):
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
-        # --- 戦略に応じた動的オッズ上限＆点数切り替えロジック ---
         filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
         if len(filtered_base) == 0:
             filtered_base = df_test
@@ -225,7 +228,6 @@ def run_inference(model, target_stadium, target_race_no):
         for _, row in top_n.iterrows():
             lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
             
-        # --- 自動結果検証機能（なぜ外れたかの蓄積） ---
         actual_win = extract_trifecta_result(result_info)
         if actual_win:
             all_sorted = df_test.sort_values('pred_prob', ascending=False).reset_index(drop=True)
