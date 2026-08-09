@@ -22,6 +22,29 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+# --- 3連単の結果文字列を抽出する関数 ---
+def extract_trifecta_result(result_data):
+    if not result_data:
+        return None
+    if isinstance(result_data, dict):
+        for k, v in result_data.items():
+            if isinstance(v, str) and re.match(r'^[1-6]-[1-6]-[1-6]$', v.strip()):
+                return v.strip()
+            if isinstance(v, (dict, list)):
+                res = extract_trifecta_result(v)
+                if res:
+                    return res
+    elif isinstance(result_data, (list, tuple)):
+        for item in result_data:
+            res = extract_trifecta_result(item)
+            if res:
+                return res
+    elif isinstance(result_data, str):
+        match = re.search(r'([1-6]-[1-6]-[1-6])', result_data)
+        if match:
+            return match.group(1)
+    return None
+
 # --- Discord通知関数 ---
 def send_discord_notification(message):
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
@@ -101,6 +124,7 @@ def run_inference(model, target_stadium, target_race_no):
         
         odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
+        result_info = boatrace.get_race_result(d=today, stadium=stadium_code, race=race_no)
         
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
@@ -190,6 +214,29 @@ def run_inference(model, target_stadium, target_race_no):
         for _, row in top_n.iterrows():
             lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
             
+        # --- 自動結果検証機能（なぜ外れたかの蓄積） ---
+        actual_win = extract_trifecta_result(result_info)
+        if actual_win:
+            # 全体の予測結果の中から実際の勝者を探す（フィルタ前の全組み合わせから順位を特定）
+            all_sorted = df_test.sort_values('pred_prob', ascending=False).reset_index(drop=True)
+            matched_row = all_sorted[all_sorted['combo'] == actual_win]
+            
+            if not matched_row.empty:
+                rank_idx = matched_row.index[0] + 1
+                actual_score = matched_row.iloc[0]['pred_prob']
+                actual_odds = matched_row.iloc[0]['odds']
+                
+                # 推奨買い目（top_n）に含まれていたか判定
+                recommended_combos = top_n['combo'].values
+                if actual_win in recommended_combos:
+                    result_msg = f"✅ **【結果速報】的中！** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) [AI評価: {rank_idx}位 / スコア: {actual_score:.4f}]"
+                else:
+                    result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) → **[AIの内部評価: {rank_idx}位 / スコア: {actual_score:.4f}]**"
+            else:
+                result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (AIの候補外またはオッズ対象外)"
+            
+            lines.append(result_msg)
+
         return "\n".join(lines)
 
     except Exception as e:
@@ -266,3 +313,4 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
+
