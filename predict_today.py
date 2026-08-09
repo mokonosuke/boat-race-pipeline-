@@ -10,6 +10,18 @@ try:
 except Exception as e:
     print(f"❌ PyJPBoatrace 読み込み失敗: {e}")
 
+# --- 安全な数値変換用ヘルパー関数 ---
+def safe_float(val, default=0.0):
+    if val is None:
+        return default
+    val_str = str(val).replace('m', '').replace('%', '').strip()
+    if val_str == '' or val_str == '-':
+        return default
+    try:
+        return float(val_str)
+    except (ValueError, TypeError):
+        return default
+
 # --- Discord通知関数 ---
 def send_discord_notification(message):
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
@@ -29,12 +41,12 @@ def send_discord_notification(message):
 
 # --- 特徴量スコア計算 ---
 def get_factor_score(boat_data, assigned_course):
-    local_3ren = float(boat_data.get('local_in3rd', 0.0))
-    ave_st = float(boat_data.get('aveST', 0.20))
+    local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
+    ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
     course_key = f"course_{assigned_course}_2nd_rate"
-    course_record_score = float(boat_data.get(course_key, 30.0))
-    motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
-    boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
+    course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
+    motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
+    boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -79,7 +91,6 @@ def parse_stadium(stadium_input):
     return '11'
 
 def run_inference(model, target_stadium, target_race_no):
-    """当日の実際のレースデータとオッズを取得し、学習済みモデルで推論する（上位3点を返す）"""
     try:
         boatrace = PyJPBoatrace()
         from datetime import date
@@ -94,25 +105,8 @@ def run_inference(model, target_stadium, target_race_no):
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
-        # 気象データ（風速・風向き）の安全な抽出処理
-        wind_speed = 0.0
-        wind_dir = ""
-        try:
-            raw_wind_speed = race_info.get('wind_speed', 0.0)
-            if raw_wind_speed is not None:
-                wind_str = str(raw_wind_speed).replace('m', '').strip()
-                # '-' や空文字の場合は 0.0 にする
-                if wind_str and wind_str != '-':
-                    wind_speed = float(wind_str)
-                else:
-                    wind_speed = 0.0
-        except Exception:
-            wind_speed = 0.0
-
-        try:
-            wind_dir = str(race_info.get('wind_direction', ''))
-        except Exception:
-            wind_dir = ""
+        wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
+        wind_dir = str(race_info.get('wind_direction', ''))
 
         is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
         is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
@@ -121,9 +115,12 @@ def run_inference(model, target_stadium, target_race_no):
         for combo, odds in odds_info.items():
             if not isinstance(combo, str) or '-' not in combo:
                 continue
+            odds_val = safe_float(odds, 0.0)
+            if odds_val <= 0:
+                continue
+            
             try:
                 boats = [int(b) for b in combo.split('-')]
-                odds_val = float(odds)
             except (ValueError, TypeError):
                 continue
             
