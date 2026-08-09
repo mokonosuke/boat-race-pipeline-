@@ -26,11 +26,13 @@ jobs:
       - name: Run prediction for all races
         env:
           BROAT_RACE_ENV: "production"
+          # ★ここでサイレントモードをONにします
+          SILENT_MODE: "true"
         run: |
           python predict_today.py
 
       - name: Notify completion to Discord
-        # 予測処理が正常終了した場合のみ通知を送ります
+        # 予測が成功した時だけ、完了通知を1通だけ送る
         if: success()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
