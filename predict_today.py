@@ -47,7 +47,6 @@ def extract_trifecta_result(result_data):
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
-    # ★朝の自動予測などのサイレントモード時はDiscord通知をスキップする
     if os.environ.get("SILENT_MODE", "").lower() == "true":
         print(f"🔇 [サイレントモード] Discord通知をスキップしました")
         return
@@ -92,7 +91,6 @@ def get_factor_score(boat_data, assigned_course):
 
     return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score
 
-# --- 会場名からコードへの変換マップ ---
 STADIUM_MAP = {
     '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
     '浜名湖': '06', '蒲郡': '07', '常滑': '08', '津': '09', '三国': '10',
@@ -201,6 +199,10 @@ def run_inference(model, target_stadium, target_race_no):
             filtered_base = df_test
             
         sorted_base = filtered_base.sort_values('pred_prob', ascending=False).reset_index(drop=True)
+        
+        # 🛡️【安全ガード】データが空の場合はここで安全に処理を抜ける
+        if sorted_base.empty:
+            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
         if len(sorted_base) >= 2:
             top_score = sorted_base.loc[0, 'pred_prob']
@@ -324,3 +326,4 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
+
