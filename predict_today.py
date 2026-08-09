@@ -124,7 +124,13 @@ def run_inference(model, target_stadium, target_race_no):
         
         odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
-        result_info = boatrace.get_race_result(d=today, stadium=stadium_code, race=race_no)
+        
+        # 結果情報はまだ出ていない場合があるため個別で安全に取得
+        result_info = None
+        try:
+            result_info = boatrace.get_race_result(d=today, stadium=stadium_code, race=race_no)
+        except Exception:
+            pass
         
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
@@ -187,7 +193,6 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         
         # --- 戦略に応じた動的オッズ上限＆点数切り替えロジック ---
-        # まずは広め（5倍〜200倍）でベースを作成
         filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
         if len(filtered_base) == 0:
             filtered_base = df_test
@@ -200,14 +205,12 @@ def run_inference(model, target_stadium, target_race_no):
             score_diff = top_score - second_score
             
             if top_score > 0.12 or score_diff > 0.03:
-                # 本命・堅調：オッズ上限を50倍に絞り、上位3点を選ぶ
                 sub_filtered = sorted_base[sorted_base['odds'] <= 50.0]
                 if len(sub_filtered) < 3:
                     sub_filtered = sorted_base
                 n_picks = 3
                 strategy_name = "3点絞り（本命・上限50倍）"
             else:
-                # 混戦・警戒：オッズ上限を200倍まで開放し、上位4点を選ぶ
                 sub_filtered = sorted_base
                 n_picks = 4
                 strategy_name = "4点網羅（混戦・上限200倍）"
@@ -237,7 +240,7 @@ def run_inference(model, target_stadium, target_race_no):
                 if actual_win in recommended_combos:
                     result_msg = f"✅ **【結果速報】的中！** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) [AI評価: {rank_idx}位 / スコア: {actual_score:.4f}]"
                 else:
-                    result_msg = f"❌ **【結果速報】不塵中** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) → **[AIの内部評価: {rank_idx}位 / スコア: {actual_score:.4f}]**"
+                    result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) → **[AIの内部評価: {rank_idx}位 / スコア: {actual_score:.4f}]**"
             else:
                 result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (AIの候補外)"
             
