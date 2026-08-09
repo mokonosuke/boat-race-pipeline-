@@ -61,7 +61,6 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
-# 学習側と合わせた11個の特徴量
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
@@ -95,13 +94,18 @@ def run_inference(model, target_stadium, target_race_no):
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
-        # 気象データ（風速・風向き）の抽出
+        # 気象データ（風速・風向き）の安全な抽出処理
         wind_speed = 0.0
         wind_dir = ""
         try:
             raw_wind_speed = race_info.get('wind_speed', 0.0)
             if raw_wind_speed is not None:
-                wind_speed = float(str(raw_wind_speed).replace('m', '').strip())
+                wind_str = str(raw_wind_speed).replace('m', '').strip()
+                # '-' や空文字の場合は 0.0 にする
+                if wind_str and wind_str != '-':
+                    wind_speed = float(wind_str)
+                else:
+                    wind_speed = 0.0
         except Exception:
             wind_speed = 0.0
 
