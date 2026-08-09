@@ -166,10 +166,28 @@ def run_inference(model, target_stadium, target_race_no):
         if len(filtered) == 0:
             filtered = df_test
             
-        top_3 = filtered.nlargest(3, 'pred_prob')
+        # --- パターンB：AIの予測スコア基準による動的点数変更ロジック ---
+        sorted_filtered = filtered.sort_values('pred_prob', ascending=False).reset_index(drop=True)
         
-        lines = [f"🎯 **【直前予測】 会場コード: {target_stadium} / 第{target_race_no}R**"]
-        for _, row in top_3.iterrows():
+        if len(sorted_filtered) >= 2:
+            top_score = sorted_filtered.loc[0, 'pred_prob']
+            second_score = sorted_filtered.loc[1, 'pred_prob']
+            score_diff = top_score - second_score
+            
+            if top_score > 0.12 or score_diff > 0.03:
+                n_picks = 3
+                strategy_name = "3点絞り（本命・堅調）"
+            else:
+                n_picks = 4
+                strategy_name = "4点網羅（混戦・警戒）"
+        else:
+            n_picks = min(3, len(sorted_filtered))
+            strategy_name = f"{n_picks}点"
+
+        top_n = sorted_filtered.head(n_picks)
+        
+        lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
+        for _, row in top_n.iterrows():
             lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
             
         return "\n".join(lines)
