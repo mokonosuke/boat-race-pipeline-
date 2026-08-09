@@ -186,29 +186,37 @@ def run_inference(model, target_stadium, target_race_no):
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
-        filtered = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 60.0)]
-        if len(filtered) == 0:
-            filtered = df_test
+        # --- 戦略に応じた動的オッズ上限＆点数切り替えロジック ---
+        # まずは広め（5倍〜200倍）でベースを作成
+        filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
+        if len(filtered_base) == 0:
+            filtered_base = df_test
             
-        # --- パターンB：AIの予測スコア基準による動的点数変更ロジック ---
-        sorted_filtered = filtered.sort_values('pred_prob', ascending=False).reset_index(drop=True)
+        sorted_base = filtered_base.sort_values('pred_prob', ascending=False).reset_index(drop=True)
         
-        if len(sorted_filtered) >= 2:
-            top_score = sorted_filtered.loc[0, 'pred_prob']
-            second_score = sorted_filtered.loc[1, 'pred_prob']
+        if len(sorted_base) >= 2:
+            top_score = sorted_base.loc[0, 'pred_prob']
+            second_score = sorted_base.loc[1, 'pred_prob']
             score_diff = top_score - second_score
             
             if top_score > 0.12 or score_diff > 0.03:
+                # 本命・堅調：オッズ上限を50倍に絞り、上位3点を選ぶ
+                sub_filtered = sorted_base[sorted_base['odds'] <= 50.0]
+                if len(sub_filtered) < 3:
+                    sub_filtered = sorted_base
                 n_picks = 3
-                strategy_name = "3点絞り（本命・堅調）"
+                strategy_name = "3点絞り（本命・上限50倍）"
             else:
+                # 混戦・警戒：オッズ上限を200倍まで開放し、上位4点を選ぶ
+                sub_filtered = sorted_base
                 n_picks = 4
-                strategy_name = "4点網羅（混戦・警戒）"
+                strategy_name = "4点網羅（混戦・上限200倍）"
         else:
-            n_picks = min(3, len(sorted_filtered))
+            sub_filtered = sorted_base
+            n_picks = min(3, len(sorted_base))
             strategy_name = f"{n_picks}点"
 
-        top_n = sorted_filtered.head(n_picks)
+        top_n = sub_filtered.head(n_picks)
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         for _, row in top_n.iterrows():
@@ -217,7 +225,6 @@ def run_inference(model, target_stadium, target_race_no):
         # --- 自動結果検証機能（なぜ外れたかの蓄積） ---
         actual_win = extract_trifecta_result(result_info)
         if actual_win:
-            # 全体の予測結果の中から実際の勝者を探す（フィルタ前の全組み合わせから順位を特定）
             all_sorted = df_test.sort_values('pred_prob', ascending=False).reset_index(drop=True)
             matched_row = all_sorted[all_sorted['combo'] == actual_win]
             
@@ -226,14 +233,13 @@ def run_inference(model, target_stadium, target_race_no):
                 actual_score = matched_row.iloc[0]['pred_prob']
                 actual_odds = matched_row.iloc[0]['odds']
                 
-                # 推奨買い目（top_n）に含まれていたか判定
                 recommended_combos = top_n['combo'].values
                 if actual_win in recommended_combos:
                     result_msg = f"✅ **【結果速報】的中！** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) [AI評価: {rank_idx}位 / スコア: {actual_score:.4f}]"
                 else:
-                    result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) → **[AIの内部評価: {rank_idx}位 / スコア: {actual_score:.4f}]**"
+                    result_msg = f"❌ **【結果速報】不塵中** 正解: **{actual_win}** (オッズ: {actual_odds:.1f}倍) → **[AIの内部評価: {rank_idx}位 / スコア: {actual_score:.4f}]**"
             else:
-                result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (AIの候補外またはオッズ対象外)"
+                result_msg = f"❌ **【結果速報】不的中** 正解: **{actual_win}** (AIの候補外)"
             
             lines.append(result_msg)
 
@@ -313,4 +319,3 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
-
