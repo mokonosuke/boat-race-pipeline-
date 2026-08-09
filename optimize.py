@@ -22,10 +22,9 @@ except Exception as e:
     sys.exit(1)
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
-TARGET_JCD = 11  # びわこ競走場（必要に応じて変更してください）
+TARGET_JCD = 11  # びわこ競走場
 
 def get_factor_score(boat_data, assigned_course):
-    # 1. 基本・コース・ハードウェア指標
     local_3ren = float(boat_data.get('local_in3rd', 0.0))
     ave_st = float(boat_data.get('aveST', 0.20))
     course_key = f"course_{assigned_course}_2nd_rate"
@@ -33,12 +32,10 @@ def get_factor_score(boat_data, assigned_course):
     motor_rate = float(boat_data.get('motor_2nd_rate', 30.0))
     boat_rate = float(boat_data.get('boat_2nd_rate', 30.0))
     
-    # 2. 選手ランク（A1〜B2）の数値化スコア
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
     racer_rank_score = rank_map.get(rank_str, 2.0)
     
-    # 3. 決まり手スコア
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
         kimarite_score = 45.0
@@ -103,13 +100,16 @@ def fetch_recent_races(start_date, end_date):
             if not actual_win:
                 continue
 
-            # 気象データ（風速・風向き）の抽出
             wind_speed = 0.0
             wind_dir = ""
             try:
                 raw_wind_speed = race_info.get('wind_speed', 0.0)
                 if raw_wind_speed is not None:
-                    wind_speed = float(str(raw_wind_speed).replace('m', '').strip())
+                    wind_str = str(raw_wind_speed).replace('m', '').strip()
+                    if wind_str and wind_str != '-':
+                        wind_speed = float(wind_str)
+                    else:
+                        wind_speed = 0.0
             except Exception:
                 wind_speed = 0.0
 
@@ -118,7 +118,6 @@ def fetch_recent_races(start_date, end_date):
             except Exception:
                 wind_dir = ""
 
-            # フラグ化（向かい風・追い風の判定）
             is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
             is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
@@ -206,7 +205,6 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
-    # 特徴量に風速・向かい風・追い風を追加
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
         'motor', 'boat', 'racer_rank', 'odds',
