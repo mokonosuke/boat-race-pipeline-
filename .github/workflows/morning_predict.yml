@@ -4,7 +4,7 @@ on:
   schedule:
     # 毎日朝8:00 (JST 8:00 = UTC 23:00 ※前日) に実行
     - cron: '0 23 * * *'
-  workflow_dispatch: # 手動でも実行できるようにする
+  workflow_dispatch:
 
 jobs:
   predict:
@@ -23,9 +23,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run silent prediction for all races
+      - name: Run prediction for all races
         env:
-          # DiscordのWebhook URLはあえて設定しない（または空にする）ことで通知を完全に防ぎます
           BROAT_RACE_ENV: "production"
         run: |
           python predict_today.py
+
+      - name: Notify completion to Discord
+        # 予測処理が正常終了した場合のみ通知を送ります
+        if: success()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -H "Content-Type: application/json" \
+          -d '{"content": "☀️ 今日の全レースのAI予測が完了しました！"}' \
+          $DISCORD_WEBHOOK
