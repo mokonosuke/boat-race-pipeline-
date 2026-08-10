@@ -200,7 +200,6 @@ def run_inference(model, target_stadium, target_race_no):
             
         sorted_base = filtered_base.sort_values('pred_prob', ascending=False).reset_index(drop=True)
         
-        # 🛡️【安全ガード】データが空の場合はここで安全に処理を抜ける
         if sorted_base.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
@@ -275,24 +274,17 @@ def predict_main():
             stadiums_info = boatrace.get_stadiums(today)
             target_stadiums = []
             
-            women_keywords = ['女子', 'レディース', 'ヴィーナス', 'オールレディース', 'クイーンズクライマックス', '男女w']
-            
             for s_name, info in stadiums_info.items():
                 if s_name == 'date':
                     continue
-                grade_list = [g.lower() for g in info.get('grade', [])]
                 title = info.get('title', '')
                 
-                is_major = any(g in ['sg', 'g1', 'pg1'] for g in grade_list)
-                is_women = any(kw in title for kw in women_keywords)
-                
-                if is_major or is_women:
-                    code = STADIUM_MAP.get(s_name)
-                    if code:
-                        target_stadiums.append((code, s_name, title))
+                code = STADIUM_MAP.get(s_name)
+                if code:
+                    target_stadiums.append((code, s_name, title))
             
             if not target_stadiums:
-                print("ℹ️ 本日開催のSG・G1・女子戦はありません。")
+                print("ℹ️ 本日開催のレース場はありません。")
                 return
                 
             for stadium_code, s_name, title in target_stadiums:
