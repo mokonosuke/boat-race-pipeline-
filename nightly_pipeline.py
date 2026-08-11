@@ -116,25 +116,19 @@ def nightly_summary_main():
         return
 
     target_stadiums = []
-    women_keywords = ['女子', 'レディース', 'ヴィーナス', 'オールレディース', 'クイーンズクライマックス', '男女w']
-    
+    # フィルターを外して本日の全開催場を対象にする
     for s_name, info in stadiums_info.items():
         if s_name == 'date':
             continue
-        grade_list = [g.lower() for g in info.get('grade', [])]
-        title = info.get('title', '')
-        is_major = any(g in ['sg', 'g1', 'pg1'] for g in grade_list)
-        is_women = any(kw in title for kw in women_keywords)
-        
-        if is_major or is_women:
-            code = STADIUM_MAP.get(s_name)
-            if code:
-                target_stadiums.append((code, s_name, title))
+        code = STADIUM_MAP.get(s_name)
+        if code:
+            title = info.get('title', '')
+            target_stadiums.append((code, s_name, title))
 
     total_races = 0
     hit_count = 0
     max_odds_hit = 0.0
-    miss_ranks = [] # 外れたレースの正解のAI評価順位を記録
+    miss_ranks = []
 
     print("📊 本日のレース結果集計を開始します...")
 
@@ -191,7 +185,6 @@ def nightly_summary_main():
                 df_test = pd.DataFrame(race_combos)
                 df_test['pred_prob'] = model.predict(df_test[FEATURES])
                 
-                # 動的制限・選定ロジックの再現
                 filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
                 if len(filtered_base) == 0:
                     filtered_base = df_test
@@ -209,7 +202,6 @@ def nightly_summary_main():
                 top_picks = sorted_base.head(n_picks)['combo'].values
                 
                 total_races += 1
-                # 全体の順位
                 all_sorted = df_test.sort_values('pred_prob', ascending=False).reset_index(drop=True)
                 matched = all_sorted[all_sorted['combo'] == actual_win]
                 
@@ -225,7 +217,6 @@ def nightly_summary_main():
             except Exception as e:
                 continue
 
-    # 集計結果の通知
     accuracy = (hit_count / total_races * 100) if total_races > 0 else 0.0
     avg_miss_rank = (sum(miss_ranks) / len(miss_ranks)) if miss_ranks else 0.0
     
@@ -238,12 +229,6 @@ def nightly_summary_main():
         f"  *(※惜しい順位にいたかどうかの指標です)*"
     )
     send_discord_notification(summary_msg)
-
-    # --- つづいて自動学習（直近15日間のデータでモデル再構築）の実行 ---
-    print("🔄 直近15日間のデータで自動学習を開始します...")
-    # ※ここに普段使っている学習用スクリプトの処理（データ収集・LightGBM学習・model.txt上書き保存）を記述・または呼び出します。
-    # 例: train_model_for_last_15_days()
-
 
 if __name__ == '__main__':
     nightly_summary_main()
