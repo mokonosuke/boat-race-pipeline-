@@ -117,7 +117,6 @@ def run_inference(model, target_stadium, target_race_no):
             if odds_val <= 0:
                 continue
             
-            # イン（1-XX）ならオッズ3.0倍〜、それ以外は5.0倍〜
             min_odds = 3.0 if combo.startswith('1-') else 5.0
             if not (min_odds <= odds_val <= 200.0):
                 continue
@@ -165,15 +164,14 @@ def run_inference(model, target_stadium, target_race_no):
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
-        # 期待値（EV）計算
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
         
         if sorted_df.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
-        # 期待値0.7以上を買い目に選出（最低2点）
-        top_picks_df = sorted_df[sorted_df['ev'] >= 0.7]
+        # 期待値1.0以上の中から、上位最大10点までに制限（最低2点）
+        top_picks_df = sorted_df[sorted_df['ev'] >= 1.0].head(10)
         if len(top_picks_df) < 2:
             top_picks_df = sorted_df.head(2)
 
