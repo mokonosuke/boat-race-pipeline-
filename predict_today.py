@@ -24,10 +24,6 @@ def safe_float(val, default=0.0):
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
-    if os.environ.get("SILENT_MODE", "").lower() == "true":
-        print(f"🔇 [サイレントモード] Discord通知をスキップしました")
-        return
-
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -196,7 +192,6 @@ def run_inference(model, target_stadium, target_race_no):
 
         top_n = sub_filtered.head(n_picks)
         
-        # 🎯 直前予測の買い目のみを綺麗に出力する（未確定の結果判定は排除）
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         for _, row in top_n.iterrows():
             lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
@@ -221,17 +216,18 @@ def predict_main():
     from datetime import date
     today = date.today()
 
-    if raw_stadium.upper() == 'AUTO' or not raw_stadium:
+    # 自動（AUTO）か手動（個別指定）かを判定
+    is_auto = (raw_stadium.upper() == 'AUTO' or not raw_stadium) and (str(target_race_no).upper() == 'AUTO' or not target_race_no)
+
+    if is_auto:
         try:
             stadiums_info = boatrace.get_stadiums(today)
             target_stadiums = []
             
-            # 全開催会場を対象にする
             for s_name, info in stadiums_info.items():
                 if s_name == 'date':
                     continue
                 title = info.get('title', '')
-                
                 code = STADIUM_MAP.get(s_name)
                 if code:
                     target_stadiums.append((code, s_name, title))
@@ -240,20 +236,26 @@ def predict_main():
                 print("ℹ️ 本日開催のレース場はありません。")
                 return
                 
+            total_success = 0
             for stadium_code, s_name, title in target_stadiums:
-                print(f"🔍 対象レース発見: {s_name} ({title})")
-                races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
+                print(f"🔍 処理中: {s_name} ({title})")
                 
-                for r_no in races_to_run:
+                for r_no in range(1, 13):
                     if model is not None:
-                        prediction_text = run_inference(model, stadium_code, r_no)
-                        notification = f"📌 **【対象レース】 {s_name} ({title})**\n{prediction_text}"
-                        send_discord_notification(notification)
+                        res = run_inference(model, stadium_code, r_no)
+                        if res and not res.startswith("⚠️"):
+                            total_success += 1
                     else:
-                        send_discord_notification("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+                        print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+            
+            # 自動実行のときは、個別の通知を出さず最後に完了通知を1通だけ送る
+            if total_success > 0:
+                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データの作成が完了しました！（計 {total_success} レース処理）")
+                
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
     else:
+        # 手動実行（特定の会場やレースを指定した場合）
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
             races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
@@ -267,8 +269,8 @@ def predict_main():
                 else:
                     prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
                     
+                # 手動実行のときは、これまで通りその場でDiscordに通知する
                 send_discord_notification(prediction_text)
 
 if __name__ == '__main__':
     predict_main()
-
