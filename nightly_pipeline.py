@@ -1,9 +1,10 @@
 import os
 import re
+import time
 import requests
 import pandas as pd
 import lightgbm as lgb
-from datetime import date, timedelta
+from datetime import date
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -116,7 +117,6 @@ def nightly_summary_main():
         return
 
     target_stadiums = []
-    # フィルターを外して本日の全開催場を対象にする
     for s_name, info in stadiums_info.items():
         if s_name == 'date':
             continue
@@ -130,12 +130,17 @@ def nightly_summary_main():
     max_odds_hit = 0.0
     miss_ranks = []
 
-    print("📊 本日のレース結果集計を開始します...")
+    print(f"📊 本日の全開催場・レース集計を開始します（対象会場数: {len(target_stadiums)}）...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
+        print(f"🏟️ 処理中: {s_name} ({title})")
+        
         for r_no in range(1, 13):
             try:
+                # サーバー過負荷・ブロック防止のウェイト
+                time.sleep(0.15)
+                
                 odds_info = boatrace.get_odds_trifecta(d=today, stadium=s_code_int, race=r_no)
                 race_info = boatrace.get_race_info(d=today, stadium=s_code_int, race=r_no)
                 result_info = boatrace.get_race_result(d=today, stadium=s_code_int, race=r_no)
@@ -215,6 +220,7 @@ def nightly_summary_main():
                     else:
                         miss_ranks.append(r_idx)
             except Exception as e:
+                # エラー時はスキップして次のレースへ継続
                 continue
 
     accuracy = (hit_count / total_races * 100) if total_races > 0 else 0.0
