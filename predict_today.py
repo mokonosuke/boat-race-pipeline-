@@ -3,7 +3,7 @@ import re
 import requests
 import pandas as pd
 import lightgbm as lgb
-import sys
+from datetime import date
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -92,7 +92,6 @@ def parse_stadium(stadium_input):
 def run_inference(model, target_stadium, target_race_no):
     try:
         boatrace = PyJPBoatrace()
-        from datetime import date
         today = date.today()
         
         stadium_code = int(target_stadium)
@@ -116,6 +115,11 @@ def run_inference(model, target_stadium, target_race_no):
                 continue
             odds_val = safe_float(odds, 0.0)
             if odds_val <= 0:
+                continue
+            
+            # イン（1-XX）ならオッズ3.0倍〜、それ以外は5.0倍〜
+            min_odds = 3.0 if combo.startswith('1-') else 5.0
+            if not (min_odds <= odds_val <= 200.0):
                 continue
             
             try:
@@ -153,7 +157,7 @@ def run_inference(model, target_stadium, target_race_no):
             })
             
         if not race_combos:
-            return f"⚠️ 有効な買い目データを作成できませんでした。"
+            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な買い目条件に合うデータがありません。"
             
         df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
@@ -161,40 +165,23 @@ def run_inference(model, target_stadium, target_race_no):
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
-        filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
-        if len(filtered_base) == 0:
-            filtered_base = df_test
-            
-        sorted_base = filtered_base.sort_values('pred_prob', ascending=False).reset_index(drop=True)
+        # 期待値（EV）計算
+        df_test['ev'] = df_test['pred_prob'] * df_test['odds']
+        sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
         
-        if sorted_base.empty:
+        if sorted_df.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
-        if len(sorted_base) >= 2:
-            top_score = sorted_base.loc[0, 'pred_prob']
-            second_score = sorted_base.loc[1, 'pred_prob']
-            score_diff = top_score - second_score
-            
-            if top_score > 0.12 or score_diff > 0.03:
-                sub_filtered = sorted_base[sorted_base['odds'] <= 50.0]
-                if len(sub_filtered) < 3:
-                    sub_filtered = sorted_base
-                n_picks = 3
-                strategy_name = "3点絞り（本命・上限50倍）"
-            else:
-                sub_filtered = sorted_base
-                n_picks = 4
-                strategy_name = "4点網羅（混戦・上限200倍）"
-        else:
-            sub_filtered = sorted_base
-            n_picks = min(3, len(sorted_base))
-            strategy_name = f"{n_picks}点"
+        # 期待値0.7以上を買い目に選出（最低2点）
+        top_picks_df = sorted_df[sorted_df['ev'] >= 0.7]
+        if len(top_picks_df) < 2:
+            top_picks_df = sorted_df.head(2)
 
-        top_n = sub_filtered.head(n_picks)
+        strategy_name = f"期待値ベース（{len(top_picks_df)}点選出）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
-        for _, row in top_n.iterrows():
-            lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / スコア: {row['pred_prob']:.4f})")
+        for _, row in top_picks_df.iterrows():
+            lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 期待値: {row['ev']:.2f})")
             
         return "\n".join(lines)
 
@@ -213,10 +200,8 @@ def predict_main():
         print(f"⚠️ 警告: モデルファイル '{model_path}' が見つかりません。")
 
     boatrace = PyJPBoatrace()
-    from datetime import date
     today = date.today()
 
-    # 自動（AUTO）か手動（個別指定）かを判定
     is_auto = (raw_stadium.upper() == 'AUTO' or not raw_stadium) and (str(target_race_no).upper() == 'AUTO' or not target_race_no)
 
     if is_auto:
@@ -227,18 +212,17 @@ def predict_main():
             for s_name, info in stadiums_info.items():
                 if s_name == 'date':
                     continue
-                title = info.get('title', '')
                 code = STADIUM_MAP.get(s_name)
                 if code:
-                    target_stadiums.append((code, s_name, title))
+                    target_stadiums.append((code, s_name))
             
             if not target_stadiums:
                 print("ℹ️ 本日開催のレース場はありません。")
                 return
                 
             total_success = 0
-            for stadium_code, s_name, title in target_stadiums:
-                print(f"🔍 処理中: {s_name} ({title})")
+            for stadium_code, s_name in target_stadiums:
+                print(f"🔍 処理中: {s_name}")
                 
                 for r_no in range(1, 13):
                     if model is not None:
@@ -248,14 +232,12 @@ def predict_main():
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
-            # 自動実行のときは、個別の通知を出さず最後に完了通知を1通だけ送る
             if total_success > 0:
                 send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データの作成が完了しました！（計 {total_success} レース処理）")
                 
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
     else:
-        # 手動実行（特定の会場やレースを指定した場合）
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
             races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
@@ -269,7 +251,6 @@ def predict_main():
                 else:
                     prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
                     
-                # 手動実行のときは、これまで通りその場でDiscordに通知する
                 send_discord_notification(prediction_text)
 
 if __name__ == '__main__':
