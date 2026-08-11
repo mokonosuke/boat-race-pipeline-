@@ -130,17 +130,14 @@ def nightly_summary_main():
     max_odds_hit = 0.0
     miss_ranks = []
 
-    print(f"📊 本日の全開催場・レース集計を開始します（対象会場数: {len(target_stadiums)}）...")
+    print(f"📊 改善版ロジックで集計を開始します (全{len(target_stadiums)}会場)...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
-        print(f"🏟️ 処理中: {s_name} ({title})")
         
         for r_no in range(1, 13):
             try:
-                # サーバー過負荷・ブロック防止のウェイト
                 time.sleep(0.15)
-                
                 odds_info = boatrace.get_odds_trifecta(d=today, stadium=s_code_int, race=r_no)
                 race_info = boatrace.get_race_info(d=today, stadium=s_code_int, race=r_no)
                 result_info = boatrace.get_race_result(d=today, stadium=s_code_int, race=r_no)
@@ -164,6 +161,12 @@ def nightly_summary_main():
                     odds_val = safe_float(odds, 0.0)
                     if odds_val <= 0:
                         continue
+                    
+                    # 改善: イン（1-XX）ならオッズ3倍〜、それ以外は5倍〜で広く拾う
+                    min_odds = 3.0 if combo.startswith('1-') else 5.0
+                    if not (min_odds <= odds_val <= 200.0):
+                        continue
+                        
                     try:
                         boats = [int(b) for b in combo.split('-')]
                     except:
@@ -190,27 +193,25 @@ def nightly_summary_main():
                 df_test = pd.DataFrame(race_combos)
                 df_test['pred_prob'] = model.predict(df_test[FEATURES])
                 
-                filtered_base = df_test[(df_test['odds'] >= 5.0) & (df_test['odds'] <= 200.0)]
-                if len(filtered_base) == 0:
-                    filtered_base = df_test
-                sorted_base = filtered_base.sort_values('pred_prob', ascending=False).reset_index(drop=True)
+                # 改善: 期待値(EV)を計算して基準にする
+                df_test['ev'] = df_test['pred_prob'] * df_test['odds']
                 
-                if len(sorted_base) >= 2:
-                    if sorted_base.loc[0, 'pred_prob'] > 0.12 or (sorted_base.loc[0, 'pred_prob'] - sorted_base.loc[1, 'pred_prob']) > 0.03:
-                        sub_f = sorted_base[sorted_base['odds'] <= 50.0]
-                        n_picks = 3 if len(sub_f) >= 3 else len(sorted_base)
-                    else:
-                        n_picks = 4
-                else:
-                    n_picks = min(3, len(sorted_base))
+                # 改善: EVが高い順に並べる
+                sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
                 
-                top_picks = sorted_base.head(n_picks)['combo'].values
+                # 改善: 期待値が一定水準(0.7)以上のものをすべて買い目に含める（可変点数）
+                # 最低でも上位2点は必ず選出
+                top_picks_df = sorted_df[sorted_df['ev'] >= 0.7]
+                if len(top_picks_df) < 2:
+                    top_picks_df = sorted_df.head(2)
+                
+                top_picks = top_picks_df['combo'].values
                 
                 total_races += 1
-                all_sorted = df_test.sort_values('pred_prob', ascending=False).reset_index(drop=True)
-                matched = all_sorted[all_sorted['combo'] == actual_win]
+                matched = sorted_df[sorted_df['combo'] == actual_win]
                 
                 if not matched.empty:
+                    # 正解の順位をEVベースで算出
                     r_idx = matched.index[0] + 1
                     if actual_win in top_picks:
                         hit_count += 1
@@ -220,22 +221,20 @@ def nightly_summary_main():
                     else:
                         miss_ranks.append(r_idx)
             except Exception as e:
-                # エラー時はスキップして次のレースへ継続
                 continue
 
     accuracy = (hit_count / total_races * 100) if total_races > 0 else 0.0
     avg_miss_rank = (sum(miss_ranks) / len(miss_ranks)) if miss_ranks else 0.0
     
     summary_msg = (
-        f"📊 **【本日のAI予測・結果まとめ】**\n"
+        f"📊 **【本日のAI予測・結果まとめ (改善版ロジック)】**\n"
         f"• 対象レース数: {total_races}R\n"
         f"• 的中数: {hit_count}R (的中率: {accuracy:.1f}%)\n"
         f"• 最高的中配当: {max_odds_hit:.1f}倍\n"
         f"• 外れレース時の正解の平均AI評価順位: 約 {avg_miss_rank:.1f}位\n"
-        f"  *(※惜しい順位にいたかどうかの指標です)*"
+        f"  *(※期待値ベースの選出による分析です)*"
     )
     send_discord_notification(summary_msg)
 
 if __name__ == '__main__':
     nightly_summary_main()
-
