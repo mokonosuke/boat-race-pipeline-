@@ -61,7 +61,23 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
-def get_factor_score(boat_data, assigned_course):
+# --- 会場特性データ ---
+STADIUM_TRAITS = {
+    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
+    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
+    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
+    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
+    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
+    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
+    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
+    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
+    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
+    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
+    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
+    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+}
+
+def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
     course_key = f"course_{assigned_course}_2nd_rate"
@@ -83,7 +99,13 @@ def get_factor_score(boat_data, assigned_course):
     else:
         kimarite_score = 35.0
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score
+    exh_time = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
+    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
+    
+    s_key = str(stadium_code).zfill(2)
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+
+    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
 
 STADIUM_MAP = {
     '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
@@ -96,7 +118,8 @@ STADIUM_MAP = {
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
-    'wind_speed', 'is_headwind', 'is_tailwind'
+    'wind_speed', 'is_headwind', 'is_tailwind',
+    'exh_time', 'turn_time', 'water_type', 'in_rate'
 ]
 
 def nightly_summary_main():
@@ -130,7 +153,7 @@ def nightly_summary_main():
     max_odds_hit = 0.0
     miss_ranks = []
 
-    print(f"📊 期待値ベース（1.0以上・最大10点）ロジックで集計を開始します (全{len(target_stadiums)}会場)...")
+    print(f"📊 15特徴量・期待値ベースロジックで集計を開始します (全{len(target_stadiums)}会場)...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
@@ -162,7 +185,6 @@ def nightly_summary_main():
                     if odds_val <= 0:
                         continue
                     
-                    # イン（1-XX）ならオッズ3.0倍〜、それ以外は5.0倍〜
                     min_odds = 3.0 if combo.startswith('1-') else 5.0
                     if not (min_odds <= odds_val <= 200.0):
                         continue
@@ -172,19 +194,25 @@ def nightly_summary_main():
                     except:
                         continue
                     
-                    t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk = 0, 0, 0, 0, 0, 0, 0
+                    t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+                    water_val, in_rate_val = 0.5, 0.5
+                    
                     for idx, b in enumerate(boats):
                         c_no = idx + 1
                         b_data = race_info.get(f"boat{b}", {})
-                        l3, st, cr, kim, mot, bot, rnk = get_factor_score(b_data, c_no)
+                        l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(b_data, c_no, s_code_int)
                         t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
+                        t_exh += exh; t_turn += turn
+                        water_val = water
+                        in_rate_val = in_rate
                     
                     race_combos.append({
                         'combo': combo, 'odds': odds_val,
                         'local_3ren': t_l3/3, 'st': t_st/3, 'course': t_cr/3,
                         'kimarite': t_kim/3, 'motor': t_mot/3, 'boat': t_bot/3,
-                        'racer_rank': t_rnk/3, 'wind_speed': wind_speed,
-                        'is_headwind': is_headwind, 'is_tailwind': is_tailwind
+                        'racer_rank': t_rnk/3, 'exh_time': t_exh/3, 'turn_time': t_turn/3,
+                        'water_type': water_val, 'in_rate': in_rate_val,
+                        'wind_speed': wind_speed, 'is_headwind': is_headwind, 'is_tailwind': is_tailwind
                     })
                 
                 if not race_combos:
@@ -193,11 +221,9 @@ def nightly_summary_main():
                 df_test = pd.DataFrame(race_combos)
                 df_test['pred_prob'] = model.predict(df_test[FEATURES])
                 
-                # 期待値（EV）計算
                 df_test['ev'] = df_test['pred_prob'] * df_test['odds']
                 sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
                 
-                # 期待値1.0以上の中から、上位最大10点までに制限（最低2点）
                 top_picks_df = sorted_df[sorted_df['ev'] >= 1.0].head(10)
                 if len(top_picks_df) < 2:
                     top_picks_df = sorted_df.head(2)
@@ -223,12 +249,11 @@ def nightly_summary_main():
     avg_miss_rank = (sum(miss_ranks) / len(miss_ranks)) if miss_ranks else 0.0
     
     summary_msg = (
-        f"📊 **【本日のAI予測・結果まとめ (期待値1.0/最大10点)】**\n"
+        f"📊 **【本日のAI予測・結果まとめ (15特徴量・期待値ベース)】**\n"
         f"• 対象レース数: {total_races}R\n"
         f"• 的中数: {hit_count}R (的中率: {accuracy:.1f}%)\n"
         f"• 最高的中配当: {max_odds_hit:.1f}倍\n"
-        f"• 外れレース時の正解の平均AI評価順位: 約 {avg_miss_rank:.1f}位\n"
-        f"  *(※期待値ベース・最大10点選出による検証)*"
+        f"• 外れレース時の正解の平均AI評価順位: 約 {avg_miss_rank:.1f}位"
     )
     send_discord_notification(summary_msg)
 
