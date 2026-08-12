@@ -39,8 +39,24 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知でエラーが発生しました: {e}")
 
+# --- 会場特性データ ---
+STADIUM_TRAITS = {
+    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
+    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
+    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
+    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
+    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
+    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
+    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
+    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
+    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
+    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
+    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
+    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+}
+
 # --- 特徴量スコア計算 ---
-def get_factor_score(boat_data, assigned_course):
+def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
     course_key = f"course_{assigned_course}_2nd_rate"
@@ -62,7 +78,13 @@ def get_factor_score(boat_data, assigned_course):
     else:
         kimarite_score = 35.0
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score
+    exh_time = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
+    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
+    
+    s_key = str(stadium_code).zfill(2)
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+
+    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
 
 STADIUM_MAP = {
     '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
@@ -75,7 +97,8 @@ STADIUM_MAP = {
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
-    'wind_speed', 'is_headwind', 'is_tailwind'
+    'wind_speed', 'is_headwind', 'is_tailwind',
+    'exh_time', 'turn_time', 'water_type', 'in_rate'
 ]
 
 def parse_stadium(stadium_input):
@@ -126,30 +149,40 @@ def run_inference(model, target_stadium, target_race_no):
             except (ValueError, TypeError):
                 continue
             
-            total_l3, total_st, total_cr, total_kim, total_motor, total_boat, total_rank = 0, 0, 0, 0, 0, 0, 0
+            t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+            water_val, in_rate_val = 0.5, 0.5
+            
             for idx, b in enumerate(boats):
                 assigned_course = idx + 1
                 boat_key = f"boat{b}"
                 boat_data = race_info.get(boat_key, {})
-                l3, st, cr, kim, mot, bot, rnk = get_factor_score(boat_data, assigned_course)
-                total_l3 += l3
-                total_st += st
-                total_cr += cr
-                total_kim += kim
-                total_motor += mot
-                total_boat += bot
-                total_rank += rnk
+                l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(boat_data, assigned_course, stadium_code)
+                t_l3 += l3
+                t_st += st
+                t_cr += cr
+                t_kim += kim
+                t_mot += mot
+                t_bot += bot
+                t_rnk += rnk
+                t_exh += exh
+                t_turn += turn
+                water_val = water
+                in_rate_val = in_rate
             
             race_combos.append({
                 'combo': combo,
                 'odds': odds_val,
-                'local_3ren': total_l3 / 3,
-                'st': total_st / 3,
-                'course': total_cr / 3,
-                'kimarite': total_kim / 3,
-                'motor': total_motor / 3,
-                'boat': total_boat / 3,
-                'racer_rank': total_rank / 3,
+                'local_3ren': t_l3 / 3,
+                'st': t_st / 3,
+                'course': t_cr / 3,
+                'kimarite': t_kim / 3,
+                'motor': t_mot / 3,
+                'boat': t_bot / 3,
+                'racer_rank': t_rnk / 3,
+                'exh_time': t_exh / 3,
+                'turn_time': t_turn / 3,
+                'water_type': water_val,
+                'in_rate': in_rate_val,
                 'wind_speed': wind_speed,
                 'is_headwind': is_headwind,
                 'is_tailwind': is_tailwind
@@ -170,12 +203,11 @@ def run_inference(model, target_stadium, target_race_no):
         if sorted_df.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
-        # 期待値1.0以上の中から、上位最大10点までに制限（最低2点）
         top_picks_df = sorted_df[sorted_df['ev'] >= 1.0].head(10)
         if len(top_picks_df) < 2:
             top_picks_df = sorted_df.head(2)
 
-        strategy_name = f"期待値ベース（{len(top_picks_df)}点選出）"
+        strategy_name = f"15特徴量・期待値ベース（{len(top_picks_df)}点選出）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         for _, row in top_picks_df.iterrows():
@@ -231,7 +263,7 @@ def predict_main():
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
             if total_success > 0:
-                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データの作成が完了しました！（計 {total_success} レース処理）")
+                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（15特徴量対応）の作成が完了しました！（計 {total_success} レース処理）")
                 
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
