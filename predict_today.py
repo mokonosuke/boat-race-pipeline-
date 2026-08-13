@@ -207,13 +207,13 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
-        # --- 3連単の選出（的中率重視：期待値1.0以上かつ予測確率が高い上位4点に絞る） ---
+        # --- 3連単の選出（的中率重視：期待値1.0以上かつ予測確率が高い上位4点） ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
         top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
 
-        # --- 2連単の確率算出と「堅め〜中穴」バランス選出（上位2点） ---
+        # --- 2連単の確率算出と的中率重視選出（予測確率が高い上位2点） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -247,12 +247,9 @@ def run_inference(model, target_stadium, target_race_no):
         df_exacta = pd.DataFrame(exacta_list)
         top_exacta_df = pd.DataFrame()
         if not df_exacta.empty:
-            valid_exacta = df_exacta[df_exacta['ev'] >= 1.0].sort_values(by='ev', ascending=False)
-            if valid_exacta.empty:
-                valid_exacta = df_exacta.sort_values(by='ev', ascending=False)
-            top_exacta_df = valid_exacta.head(2)
+            top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = f"15特徴量（3連単:的中率重視4点 / 2連単:バランス2点）"
+        strategy_name = f"15特徴量（3連単:的中率重視4点 / 2連単:的中率重視2点）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
@@ -261,10 +258,10 @@ def run_inference(model, target_stadium, target_race_no):
             lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
             
         if not top_exacta_df.empty:
-            lines.append("\n**【2連単 押さえ（堅め〜中穴バランス）】**")
+            lines.append("\n**【2連単 押さえ（的中率重視）】**")
             for _, row in top_exacta_df.iterrows():
                 odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "算出中"
-                lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 期待値: {row['ev']:.2f})")
+                lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 予測確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
 
@@ -316,7 +313,7 @@ def predict_main():
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
             if total_success > 0:
-                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（3連単的中率重視対応）の作成が完了しました！（計 {total_success} レース処理）")
+                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（3連単＆2連単的中率重視）の作成が完了しました！（計 {total_success} レース処理）")
                 
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
