@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 import lightgbm as lgb
 from datetime import date
+import traceback
+import sys  # 追加: エラー終了用
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -165,6 +167,9 @@ def run_inference(model, target_stadium, target_race_no):
                 assigned_course = idx + 1
                 boat_key = f"boat{b}"
                 boat_data = race_info.get(boat_key, {})
+                if not isinstance(boat_data, dict):
+                    boat_data = {}
+                
                 l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(boat_data, assigned_course, stadium_code)
                 t_l3 += l3
                 t_st += st
@@ -207,13 +212,13 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
-        # --- 3連単の選出（的中率重視：期待値1.0以上かつ予測確率が高い上位4点） ---
+        # --- 3連単の選出 ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
         top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
 
-        # --- 2連単の確率算出と的中率重視選出（予測確率が高い上位2点） ---
+        # --- 2連単の選出 ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -266,7 +271,9 @@ def run_inference(model, target_stadium, target_race_no):
         return "\n".join(lines)
 
     except Exception as e:
-        return f"⚠️ 推論処理中にエラーが発生しました: {e}"
+        error_msg = traceback.format_exc()
+        # エラー詳細を返す
+        raise Exception(f"推論処理中にエラーが発生しました: {e}\n{error_msg}")
 
 def predict_main():
     raw_stadium = os.environ.get('INPUT_STADIUM', 'AUTO').strip()
@@ -306,32 +313,41 @@ def predict_main():
                 
                 for r_no in range(1, 13):
                     if model is not None:
+                        # 成功した場合のみDiscord通知
                         res = run_inference(model, stadium_code, r_no)
                         if res and not res.startswith("⚠️"):
+                            send_discord_notification(res) # 各レースごとに通知
                             total_success += 1
+                        else:
+                            print(res)
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
             if total_success > 0:
-                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（3連単＆2連単的中率重視）の作成が完了しました！（計 {total_success} レース処理）")
+                print(f"☀️ 自動予測完了（計 {total_success} レース処理）")
                 
         except Exception as e:
-            send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
+            err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
+            print(err_msg)
+            send_discord_notification(err_msg)
+            sys.exit(1) # エラー終了
     else:
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
             races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
             
             for r_no in races_to_run:
-                start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{r_no}レース ==="
-                print(start_msg)
-                
-                if model is not None:
-                    prediction_text = run_inference(model, target_stadium, r_no)
-                else:
-                    prediction_text = "⚠️ モデルファイルが存在しないため、推論をスキップしました。"
-                    
-                send_discord_notification(prediction_text)
+                try:
+                    if model is not None:
+                        prediction_text = run_inference(model, target_stadium, r_no)
+                        send_discord_notification(prediction_text)
+                    else:
+                        print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+                except Exception as e:
+                    err_msg = f"⚠️ {target_stadium} 第{r_no}レースでエラー: {e}"
+                    print(err_msg)
+                    send_discord_notification(err_msg)
+                    sys.exit(1) # エラー終了
 
 if __name__ == '__main__':
     predict_main()
