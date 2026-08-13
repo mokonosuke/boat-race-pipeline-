@@ -121,6 +121,7 @@ def run_inference(model, target_stadium, target_race_no):
         race_no = int(target_race_no)
         
         odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
+        exacta_odds_info = boatrace.get_odds_exacta_quinella(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
         
         if not odds_info or not race_info:
@@ -203,16 +204,59 @@ def run_inference(model, target_stadium, target_race_no):
         if sorted_df.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
-        # 期待値 1.0 以上 ＆ 予測確率 1%以上 の条件を満たし、かつ最大8点までに制限
+        # --- 3連単の選出（確率1%以上・最大8点） ---
         top_picks_df = sorted_df[(sorted_df['ev'] >= 1.0) & (sorted_df['pred_prob'] >= 0.01)].head(8)
         if top_picks_df.empty:
             top_picks_df = sorted_df.head(2)
 
-        strategy_name = f"15特徴量・期待値ベース（確率1%以上・最大8点・{len(top_picks_df)}点選出）"
+        # --- 2連単の確率算出と的中率重視選出（上位2点） ---
+        df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
+        exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
+        
+        exacta_list = []
+        if exacta_odds_info:
+            for ex_combo, ex_odds in exacta_odds_info.items():
+                if not isinstance(ex_combo, str) or '-' not in ex_combo:
+                    continue
+                parts = ex_combo.split('-')
+                if len(parts) != 2:
+                    continue
+                ex_odds_val = safe_float(ex_odds, 0.0)
+                if ex_odds_val <= 0:
+                    continue
+                
+                match_row = exacta_prob_df[exacta_prob_df['exacta_combo'] == ex_combo]
+                if not match_row.empty:
+                    prob = match_row['pred_prob'].values[0]
+                    ev = prob * ex_odds_val
+                    exacta_list.append({
+                        'combo': ex_combo,
+                        'odds': ex_odds_val,
+                        'pred_prob': prob,
+                        'ev': ev
+                    })
+        
+        df_exacta = pd.DataFrame(exacta_list)
+        top_exacta_df = pd.DataFrame()
+        if not df_exacta.empty:
+            # 的中率重視：期待値1.0以上を優先しつつ、予測確率（的中率）が高い順に上位2点
+            valid_exacta = df_exacta[df_exacta['ev'] >= 1.0].sort_values('pred_prob', ascending=False)
+            if valid_exacta.empty:
+                valid_exacta = df_exacta.sort_values('pred_prob', ascending=False)
+            top_exacta_df = valid_exacta.head(2)
+
+        strategy_name = f"15特徴量（3連単:最大8点 / 2連単:的中率重視2点）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
+        
+        lines.append("\n**【3連単 推奨買い目】**")
         for _, row in top_picks_df.iterrows():
-            lines.append(f"• 推奨買い目: **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 期待値: {row['ev']:.2f})")
+            lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 期待値: {row['ev']:.2f})")
+            
+        if not top_exacta_df.empty:
+            lines.append("\n**【2連単 押さえ（的中率重視）】**")
+            for _, row in top_exacta_df.iterrows():
+                lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
 
@@ -264,7 +308,7 @@ def predict_main():
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
             if total_success > 0:
-                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（15特徴量対応）の作成が完了しました！（計 {total_success} レース処理）")
+                send_discord_notification(f"☀️ **【自動予測完了】** 本日の全会場・全レースのAI予測データ（3連単＆2連単対応）の作成が完了しました！（計 {total_success} レース処理）")
                 
         except Exception as e:
             send_discord_notification(f"⚠️ 自動判定処理でエラーが発生しました: {e}")
@@ -277,6 +321,7 @@ def predict_main():
                 start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{r_no}レース ==="
                 print(start_msg)
                 
+                if model is notomial if model is not None:
                 if model is not None:
                     prediction_text = run_inference(model, target_stadium, r_no)
                 else:
@@ -286,3 +331,4 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
+
