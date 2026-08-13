@@ -1,5 +1,4 @@
 import os
-import re
 import requests
 import pandas as pd
 import lightgbm as lgb
@@ -197,52 +196,34 @@ def run_inference(model, target_stadium, target_race_no):
         
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
-        
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
+        
+        # --- 3連単の選出 ---
         sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
-        
-        if sorted_df.empty:
-            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
-        
-        # --- 3連単の選出（確率1%以上・最大8点） ---
         top_picks_df = sorted_df[(sorted_df['ev'] >= 1.0) & (sorted_df['pred_prob'] >= 0.01)].head(8)
         if top_picks_df.empty:
             top_picks_df = sorted_df.head(2)
 
-        # --- 2連単の確率算出と的中率重視選出（上位2点） ---
+        # --- 2連単の確率算出（3連単の結果から直接集計） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
+        # 確率を合算
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
-        exacta_list = []
-        if exacta_odds_info:
+        # オッズを紐付け（なければ0で補完）
+        exacta_odds_list = []
+        if isinstance(exacta_odds_info, dict):
             for ex_combo, ex_odds in exacta_odds_info.items():
-                if not isinstance(ex_combo, str) or '-' not in ex_combo:
-                    continue
-                parts = ex_combo.split('-')
-                if len(parts) != 2:
-                    continue
-                ex_odds_val = safe_float(ex_odds, 0.0)
-                if ex_odds_val <= 0:
-                    continue
-                
-                match_row = exacta_prob_df[exacta_prob_df['exacta_combo'] == ex_combo]
-                if not match_row.empty:
-                    prob = match_row['pred_prob'].values[0]
-                    ev = prob * ex_odds_val
-                    exacta_list.append({
-                        'combo': ex_combo,
-                        'odds': ex_odds_val,
-                        'pred_prob': prob,
-                        'ev': ev
-                    })
+                exacta_odds_list.append({'exacta_combo': ex_combo, 'odds': safe_float(ex_odds)})
         
-        df_exacta = pd.DataFrame(exacta_list)
-        top_exacta_df = pd.DataFrame()
-        if not df_exacta.empty:
-            valid_exacta = df_exacta[df_exacta['ev'] >= 1.0].sort_values('pred_prob', ascending=False)
-            if valid_exacta.empty:
-                valid_exacta = df_exacta.sort_values('pred_prob', ascending=False)
-            top_exacta_df = valid_exacta.head(2)
+        odds_df = pd.DataFrame(exacta_odds_list)
+        if not odds_df.empty:
+            df_exacta = pd.merge(exacta_prob_df, odds_df, on='exacta_combo', how='left').fillna({'odds': 0.0})
+        else:
+            df_exacta = exacta_prob_df
+            df_exacta['odds'] = 0.0
+
+        # 的中率重視でソート
+        top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
         strategy_name = f"15特徴量（3連単:最大8点 / 2連単:的中率重視2点）"
         
@@ -255,7 +236,9 @@ def run_inference(model, target_stadium, target_race_no):
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 押さえ（的中率重視）】**")
             for _, row in top_exacta_df.iterrows():
-                lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 確率: {row['pred_prob']*100:.1f}%)")
+                # オッズが0の場合は表記を工夫
+                odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "N/A"
+                lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
 
