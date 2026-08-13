@@ -239,7 +239,6 @@ def run_inference(model, target_stadium, target_race_no):
         df_exacta = pd.DataFrame(exacta_list)
         top_exacta_df = pd.DataFrame()
         if not df_exacta.empty:
-            # 的中率重視：期待値1.0以上を優先しつつ、予測確率（的中率）が高い順に上位2点
             valid_exacta = df_exacta[df_exacta['ev'] >= 1.0].sort_values('pred_prob', ascending=False)
             if valid_exacta.empty:
                 valid_exacta = df_exacta.sort_values('pred_prob', ascending=False)
@@ -321,7 +320,6 @@ def predict_main():
                 start_msg = f"=== 【予測開始】 会場コード:{target_stadium} 第{r_no}レース ==="
                 print(start_msg)
                 
-                if model is notomial if model is not None:
                 if model is not None:
                     prediction_text = run_inference(model, target_stadium, r_no)
                 else:
@@ -331,4 +329,3 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
-
