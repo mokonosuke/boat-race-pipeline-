@@ -203,11 +203,12 @@ def run_inference(model, target_stadium, target_race_no):
         if sorted_df.empty:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な予測データがありません。"
         
-        top_picks_df = sorted_df[sorted_df['ev'] >= 1.0].head(10)
-        if len(top_picks_df) < 2:
+        # 期待値 1.0 以上 ＆ 予測確率 1%（0.01）以上 の条件を満たすものを可変点数で抽出
+        top_picks_df = sorted_df[(sorted_df['ev'] >= 1.0) & (sorted_df['pred_prob'] >= 0.01)]
+        if top_picks_df.empty:
             top_picks_df = sorted_df.head(2)
 
-        strategy_name = f"15特徴量・期待値ベース（{len(top_picks_df)}点選出）"
+        strategy_name = f"15特徴量・期待値ベース（確率1%以上・{len(top_picks_df)}点選出）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         for _, row in top_picks_df.iterrows():
