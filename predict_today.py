@@ -133,6 +133,8 @@ def run_inference(model, target_stadium, target_race_no):
         is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
         race_combos = []
+        exacta_trifecta_odds = {}
+
         for combo, odds in odds_info.items():
             if not isinstance(combo, str) or '-' not in combo:
                 continue
@@ -140,12 +142,20 @@ def run_inference(model, target_stadium, target_race_no):
             if odds_val <= 0:
                 continue
             
+            # 3連単オッズから2連単ごとのオッズプールを収集（調和平均計算用）
+            parts = combo.split('-')
+            if len(parts) == 3:
+                ex_combo = f"{parts[0]}-{parts[1]}"
+                if ex_combo not in exacta_trifecta_odds:
+                    exacta_trifecta_odds[ex_combo] = []
+                exacta_trifecta_odds[ex_combo].append(odds_val)
+            
             min_odds = 3.0 if combo.startswith('1-') else 5.0
             if not (min_odds <= odds_val <= 200.0):
                 continue
             
             try:
-                boats = [int(b) for b in combo.split('-')]
+                boats = [int(b) for b in parts]
             except (ValueError, TypeError):
                 continue
             
@@ -204,26 +214,42 @@ def run_inference(model, target_stadium, target_race_no):
         if top_picks_df.empty:
             top_picks_df = sorted_df.head(2)
 
-        # --- 2連単の確率算出（3連単の結果から直接集計） ---
+        # --- 2連単の確率算出とオッズ補完 ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
-        # 確率を合算
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
-        # オッズを紐付け（なければ0で補完）
-        exacta_odds_list = []
-        if isinstance(exacta_odds_info, dict):
-            for ex_combo, ex_odds in exacta_odds_info.items():
-                exacta_odds_list.append({'exacta_combo': ex_combo, 'odds': safe_float(ex_odds)})
-        
-        odds_df = pd.DataFrame(exacta_odds_list)
-        if not odds_df.empty:
-            df_exacta = pd.merge(exacta_prob_df, odds_df, on='exacta_combo', how='left').fillna({'odds': 0.0})
-        else:
-            df_exacta = exacta_prob_df
-            df_exacta['odds'] = 0.0
+        exacta_list = []
+        for _, row in exacta_prob_df.iterrows():
+            ex_combo = row['exacta_combo']
+            prob = row['pred_prob']
+            
+            # オッズ取得（公式データ優先、なければ3連単オッズからの調和平均で算出）
+            odds_val = 0.0
+            if exacta_odds_info and isinstance(exacta_odds_info, dict):
+                for k, v in exacta_odds_info.items():
+                    if k.replace('=', '-') == ex_combo or k == ex_combo:
+                        odds_val = safe_float(v, 0.0)
+                        break
+            
+            if odds_val <= 0 and ex_combo in exacta_trifecta_odds:
+                odds_list = exacta_trifecta_odds[ex_combo]
+                if odds_list:
+                    inv_sum = sum(1.0 / o for o in odds_list if o > 0)
+                    if inv_sum > 0:
+                        odds_val = 1.0 / inv_sum
+            
+            ev = prob * odds_val if odds_val > 0 else 0.0
+            exacta_list.append({
+                'exacta_combo': ex_combo,
+                'odds': odds_val,
+                'pred_prob': prob,
+                'ev': ev
+            })
 
-        # 的中率重視でソート
-        top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
+        df_exacta = pd.DataFrame(exacta_list)
+        top_exacta_df = pd.DataFrame()
+        if not df_exacta.empty:
+            top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
         strategy_name = f"15特徴量（3連単:最大8点 / 2連単:的中率重視2点）"
         
@@ -236,8 +262,7 @@ def run_inference(model, target_stadium, target_race_no):
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 押さえ（的中率重視）】**")
             for _, row in top_exacta_df.iterrows():
-                # オッズが0の場合は表記を工夫
-                odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "N/A"
+                odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "算出中"
                 lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
