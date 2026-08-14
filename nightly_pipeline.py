@@ -69,7 +69,7 @@ STADIUM_TRAITS = {
     '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
     '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
     '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
-    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
+    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
     '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
     '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
     '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
@@ -84,6 +84,10 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
     motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
+    
+    # 選手の実力・地力（全国成績）
+    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
+    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -105,7 +109,9 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     s_key = str(stadium_code).zfill(2)
     trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
+    return (local_3ren, ave_st, course_record_score, kimarite_score, 
+            motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
+            trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
 STADIUM_MAP = {
     '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
@@ -115,11 +121,13 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+# 17特徴量に拡張
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
     'wind_speed', 'is_headwind', 'is_tailwind',
-    'exh_time', 'turn_time', 'water_type', 'in_rate'
+    'exh_time', 'turn_time', 'water_type', 'in_rate',
+    'national_win_rate', 'national_2nd_rate'
 ]
 
 def nightly_summary_main():
@@ -153,7 +161,7 @@ def nightly_summary_main():
     max_odds_hit = 0.0
     miss_ranks = []
 
-    print(f"📊 15特徴量・期待値ベースロジックで集計を開始します (全{len(target_stadiums)}会場)...")
+    print(f"📊 17特徴量・期待値ベースロジックで集計を開始します (全{len(target_stadiums)}会場)...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
@@ -195,14 +203,16 @@ def nightly_summary_main():
                         continue
                     
                     t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+                    t_nat_win, t_nat_2nd = 0, 0
                     water_val, in_rate_val = 0.5, 0.5
                     
                     for idx, b in enumerate(boats):
                         c_no = idx + 1
                         b_data = race_info.get(f"boat{b}", {})
-                        l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(b_data, c_no, s_code_int)
+                        l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(b_data, c_no, s_code_int)
                         t_l3 += l3; t_st += st; t_cr += cr; t_kim += kim; t_mot += mot; t_bot += bot; t_rnk += rnk
                         t_exh += exh; t_turn += turn
+                        t_nat_win += nat_w; t_nat_2nd += nat_2
                         water_val = water
                         in_rate_val = in_rate
                     
@@ -212,6 +222,7 @@ def nightly_summary_main():
                         'kimarite': t_kim/3, 'motor': t_mot/3, 'boat': t_bot/3,
                         'racer_rank': t_rnk/3, 'exh_time': t_exh/3, 'turn_time': t_turn/3,
                         'water_type': water_val, 'in_rate': in_rate_val,
+                        'national_win_rate': t_nat_win/3, 'national_2nd_rate': t_nat_2nd/3,
                         'wind_speed': wind_speed, 'is_headwind': is_headwind, 'is_tailwind': is_tailwind
                     })
                 
@@ -249,7 +260,7 @@ def nightly_summary_main():
     avg_miss_rank = (sum(miss_ranks) / len(miss_ranks)) if miss_ranks else 0.0
     
     summary_msg = (
-        f"📊 **【本日のAI予測・結果まとめ (15特徴量・期待値ベース)】**\n"
+        f"📊 **【本日のAI予測・結果まとめ (17特徴量・期待値ベース)】**\n"
         f"• 対象レース数: {total_races}R\n"
         f"• 的中数: {hit_count}R (的中率: {accuracy:.1f}%)\n"
         f"• 最高的中配当: {max_odds_hit:.1f}倍\n"
@@ -259,4 +270,3 @@ def nightly_summary_main():
 
 if __name__ == '__main__':
     nightly_summary_main()
-
