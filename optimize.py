@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 最適化パイプライン開始（15特徴量・会場特性・展示対応版）")
+print("🚀 [1/5] 最適化パイプライン開始（17特徴量・全国成績対応版）")
 
 import os
 from datetime import date, timedelta
@@ -28,7 +28,7 @@ STADIUM_TRAITS = {
     '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
     '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
     '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
-    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
+    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
     '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
     '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
     '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
@@ -36,6 +36,7 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
+# --- 特徴量スコア計算（17特徴量対応：全国勝率・2連対率を追加） ---
 def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = float(boat_data.get('local_in3rd', 0.0) or 0.0)
     ave_st = float(boat_data.get('aveST', 0.20) or 0.20)
@@ -43,6 +44,10 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     course_record_score = float(boat_data.get(course_key, 30.0) or 30.0)
     motor_rate = float(boat_data.get('motor_2nd_rate', 30.0) or 30.0)
     boat_rate = float(boat_data.get('boat_2nd_rate', 30.0) or 30.0)
+    
+    # 選手の実力・地力（全国成績）
+    national_win = float(boat_data.get('national_win_rate', 5.0) or 5.0)
+    national_2nd = float(boat_data.get('national_2nd_rate', 30.0) or 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -64,7 +69,9 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     s_key = str(stadium_code).zfill(2)
     trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
+    return (local_3ren, ave_st, course_record_score, kimarite_score, 
+            motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
+            trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
 def extract_trifecta_result(result_data):
     if not result_data:
@@ -89,7 +96,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最適化用データ（15特徴量）を取得します...")
+    print("🚀 APIから最適化用データ（17特徴量）を取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -148,13 +155,14 @@ def fetch_recent_races(start_date, end_date):
                     continue
                 
                 t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+                t_nat_win, t_nat_2nd = 0, 0
                 water_val, in_rate_val = 0.5, 0.5
                 
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(boat_data, assigned_course, TARGET_JCD)
+                    l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, TARGET_JCD)
                     t_l3 += l3
                     t_st += st
                     t_cr += cr
@@ -164,6 +172,8 @@ def fetch_recent_races(start_date, end_date):
                     t_rnk += rnk
                     t_exh += exh
                     t_turn += turn
+                    t_nat_win += nat_w
+                    t_nat_2nd += nat_2
                     water_val = water
                     in_rate_val = in_rate
                 
@@ -181,6 +191,8 @@ def fetch_recent_races(start_date, end_date):
                     'turn_time': t_turn / 3,
                     'water_type': water_val,
                     'in_rate': in_rate_val,
+                    'national_win_rate': t_nat_win / 3,
+                    'national_2nd_rate': t_nat_2nd / 3,
                     'wind_speed': wind_speed,
                     'is_headwind': is_headwind,
                     'is_tailwind': is_tailwind
@@ -200,7 +212,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_optimization(cache_data):
-    print("🤖 [3/5] 15特徴量最適化モデルの訓練を実行中...")
+    print("🤖 [3/5] 17特徴量最適化モデルの訓練を実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -220,6 +232,8 @@ def run_optimization(cache_data):
                 'turn_time': bet['turn_time'],
                 'water_type': bet['water_type'],
                 'in_rate': bet['in_rate'],
+                'national_win_rate': bet['national_win_rate'],
+                'national_2nd_rate': bet['national_2nd_rate'],
                 'wind_speed': bet['wind_speed'],
                 'is_headwind': bet['is_headwind'],
                 'is_tailwind': bet['is_tailwind'],
@@ -231,11 +245,13 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
+    # 17特徴量リスト
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
         'motor', 'boat', 'racer_rank', 'odds',
         'wind_speed', 'is_headwind', 'is_tailwind',
-        'exh_time', 'turn_time', 'water_type', 'in_rate'
+        'exh_time', 'turn_time', 'water_type', 'in_rate',
+        'national_win_rate', 'national_2nd_rate'
     ]
     
     X = df[features]
@@ -253,7 +269,7 @@ def run_optimization(cache_data):
     model.fit(X, y)
     
     model.booster_.save_model('model.txt')
-    print("✅ 学習完了: 15特徴量の最適化モデルを 'model.txt' として保存しました。")
+    print("✅ 学習完了: 17特徴量の最適化モデルを 'model.txt' として保存しました。")
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
@@ -262,4 +278,3 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] 最適化パイプライン終了")
-
