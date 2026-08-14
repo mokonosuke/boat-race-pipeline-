@@ -25,18 +25,18 @@ jobs:
 
       - name: Run prediction for all races (Silent)
         env:
-          BROAT_RACE_ENV: "production"
-          # ★ここでサイレントモードをONにします（これが抜けていました）
+          BOAT_RACE_ENV: "production"
+          # ★ここでサイレントモードをONにします
           SILENT_MODE: "true"
         run: |
           python predict_today.py
 
       - name: Notify completion to Discord
-        # 予測が成功した時だけ、完了通知を1通だけ送る
+        # 予測が成功した時だけ、完了通知を1回だけ送る
         if: success()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           curl -H "Content-Type: application/json" \
           -d '{"content": "☀️ 本日の全会場・全レースのAI予測データ作成が完了しました！"}' \
-          $DISCORD_WEBHOOK
+          $DISCORD_WEBHOOK_URL
