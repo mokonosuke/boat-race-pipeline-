@@ -4,7 +4,7 @@ import pandas as pd
 import lightgbm as lgb
 from datetime import date
 import traceback
-import sys  # 追加: エラー終了用
+import sys
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -47,8 +47,8 @@ STADIUM_TRAITS = {
     '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
     '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
     '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
-    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
+    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 1.0, 'in_rate': 0.55},
+    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
     '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
     '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
     '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
@@ -56,7 +56,7 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
-# --- 特徴量スコア計算 ---
+# --- 特徴量スコア計算（レベル2: 全国勝率・全国2連対率を追加） ---
 def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
@@ -64,6 +64,10 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
     motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
+    
+    # 選手の実力・地力（全国成績）
+    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
+    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -85,7 +89,9 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     s_key = str(stadium_code).zfill(2)
     trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
+    return (local_3ren, ave_st, course_record_score, kimarite_score, 
+            motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
+            trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
 STADIUM_MAP = {
     '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
@@ -95,11 +101,13 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+# 17特徴量に拡張
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
     'wind_speed', 'is_headwind', 'is_tailwind',
-    'exh_time', 'turn_time', 'water_type', 'in_rate'
+    'exh_time', 'turn_time', 'water_type', 'in_rate',
+    'national_win_rate', 'national_2nd_rate'
 ]
 
 def parse_stadium(stadium_input):
@@ -161,6 +169,7 @@ def run_inference(model, target_stadium, target_race_no):
                 continue
             
             t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+            t_nat_win, t_nat_2nd = 0, 0
             water_val, in_rate_val = 0.5, 0.5
             
             for idx, b in enumerate(boats):
@@ -170,7 +179,7 @@ def run_inference(model, target_stadium, target_race_no):
                 if not isinstance(boat_data, dict):
                     boat_data = {}
                 
-                l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(boat_data, assigned_course, stadium_code)
+                l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, stadium_code)
                 t_l3 += l3
                 t_st += st
                 t_cr += cr
@@ -180,6 +189,8 @@ def run_inference(model, target_stadium, target_race_no):
                 t_rnk += rnk
                 t_exh += exh
                 t_turn += turn
+                t_nat_win += nat_w
+                t_nat_2nd += nat_2
                 water_val = water
                 in_rate_val = in_rate
             
@@ -197,6 +208,8 @@ def run_inference(model, target_stadium, target_race_no):
                 'turn_time': t_turn / 3,
                 'water_type': water_val,
                 'in_rate': in_rate_val,
+                'national_win_rate': t_nat_win / 3,
+                'national_2nd_rate': t_nat_2nd / 3,
                 'wind_speed': wind_speed,
                 'is_headwind': is_headwind,
                 'is_tailwind': is_tailwind
@@ -212,13 +225,21 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
-        # --- 3連単の選出 ---
+        # --- 3連単の選出（的中率重視） ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
         top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
 
-        # --- 2連単の選出 ---
+        # --- レベル1: 確信度フィルタリング ---
+        # トップの予測確率が12%（0.12）未満の場合は「予測困難（見送り）」と判定
+        CONFIDENCE_THRESHOLD = 0.12
+        top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
+
+        if top_prob < CONFIDENCE_THRESHOLD:
+            return f"🛑 **【見送り推奨・混戦レース】 会場コード: {target_stadium} / 第{target_race_no}R**\n(AIの最高予測確率が {top_prob*100:.1f}% と低いため、波乱・混戦と判断して勝負を見送ります)"
+
+        # --- 2連単の選出（的中率重視） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -254,7 +275,7 @@ def run_inference(model, target_stadium, target_race_no):
         if not df_exacta.empty:
             top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = f"15特徴量（3連単:的中率重視4点 / 2連単:的中率重視2点）"
+        strategy_name = f"17特徴量（確信度フィルタ型 / 3連単4点 / 2連単2点）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
@@ -272,7 +293,6 @@ def run_inference(model, target_stadium, target_race_no):
 
     except Exception as e:
         error_msg = traceback.format_exc()
-        # エラー詳細を返す
         raise Exception(f"推論処理中にエラーが発生しました: {e}\n{error_msg}")
 
 def predict_main():
@@ -313,13 +333,10 @@ def predict_main():
                 
                 for r_no in range(1, 13):
                     if model is not None:
-                        # 成功した場合のみDiscord通知
                         res = run_inference(model, stadium_code, r_no)
-                        if res and not res.startswith("⚠️"):
-                            send_discord_notification(res) # 各レースごとに通知
+                        if res:
+                            send_discord_notification(res)
                             total_success += 1
-                        else:
-                            print(res)
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
             
@@ -330,7 +347,7 @@ def predict_main():
             err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
             print(err_msg)
             send_discord_notification(err_msg)
-            sys.exit(1) # エラー終了
+            sys.exit(1)
     else:
         target_stadium = parse_stadium(raw_stadium)
         if target_stadium:
@@ -347,7 +364,7 @@ def predict_main():
                     err_msg = f"⚠️ {target_stadium} 第{r_no}レースでエラー: {e}"
                     print(err_msg)
                     send_discord_notification(err_msg)
-                    sys.exit(1) # エラー終了
+                    sys.exit(1)
 
 if __name__ == '__main__':
     predict_main()
