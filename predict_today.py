@@ -231,13 +231,10 @@ def run_inference(model, target_stadium, target_race_no):
             valid_trifecta = df_test
         top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
 
-        # --- レベル1: 確信度フィルタリング ---
-        # トップの予測確率が12%（0.12）未満の場合は「予測困難（見送り）」と判定
+        # --- 確率チェック（3連単基準） ---
         CONFIDENCE_THRESHOLD = 0.12
         top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
-
-        if top_prob < CONFIDENCE_THRESHOLD:
-            return f"🛑 **【見送り推奨・混戦レース】 会場コード: {target_stadium} / 第{target_race_no}R**\n(AIの最高予測確率が {top_prob*100:.1f}% と低いため、波乱・混戦と判断して勝負を見送ります)"
+        is_trifecta_confident = top_prob >= CONFIDENCE_THRESHOLD
 
         # --- 2連単の選出（的中率重視） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
@@ -275,16 +272,23 @@ def run_inference(model, target_stadium, target_race_no):
         if not df_exacta.empty:
             top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = f"17特徴量（確信度フィルタ型 / 3連単4点 / 2連単2点）"
+        strategy_name = f"17特徴量（3連単/2連単ハイブリッド）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
-        lines.append("\n**【3連単 推奨買い目（的中率重視）】**")
+        # 三連単が自信度未満の場合のメッセージ分岐
+        if not is_trifecta_confident:
+            lines.append(f"🛑 *(※3連単の最高確率が {top_prob*100:.1f}% と低いため、3連単勝負は見送り推奨)*")
+            lines.append("\n**【3連単 参考買い目】**")
+        else:
+            lines.append("\n**【3連単 推奨買い目（的中率重視）】**")
+
         for _, row in top_picks_df.iterrows():
             lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
             
+        # 2連単は常に表示する
         if not top_exacta_df.empty:
-            lines.append("\n**【2連単 押さえ（的中率重視）】**")
+            lines.append("\n**【2連単 押さえ・安定買い目】**")
             for _, row in top_exacta_df.iterrows():
                 odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "算出中"
                 lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 予測確率: {row['pred_prob']*100:.1f}%)")
