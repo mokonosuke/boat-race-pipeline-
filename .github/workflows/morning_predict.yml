@@ -2,7 +2,6 @@ name: Morning Silent Predict
 
 on:
   schedule:
-    # 毎日朝8:00 (JST 8:00 = UTC 23:00 ※前日) に実行
     - cron: '0 23 * * *'
   workflow_dispatch:
 
@@ -31,7 +30,6 @@ jobs:
           python predict_today.py
 
       - name: Notify completion to Discord
-        # 予測が成功した時だけ、完了通知を1回だけ送る
         if: success()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
