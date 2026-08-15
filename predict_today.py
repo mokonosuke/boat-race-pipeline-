@@ -25,10 +25,6 @@ def safe_float(val, default=0.0):
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
-    # ★サイレントモード（朝の自動予測）が有効な場合は個別の通知を送らない
-    if os.environ.get("SILENT_MODE") == "true":
-        return
-
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -60,7 +56,7 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
-# --- 特徴量スコア計算（レベル2: 全国勝率・全国2連対率を追加） ---
+# --- 特徴量スコア計算 ---
 def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
@@ -69,7 +65,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     
-    # 選手の実力・地力（全国成績）
     national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
     national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
@@ -105,7 +100,6 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
-# 17特徴量に拡張
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
@@ -229,18 +223,15 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
-        # --- 3連単の選出（的中率重視） ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
         top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
 
-        # --- 確率チェック（3連単基準） ---
         CONFIDENCE_THRESHOLD = 0.12
         top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
         is_trifecta_confident = top_prob >= CONFIDENCE_THRESHOLD
 
-        # --- 2連単の選出（的中率重視） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -316,6 +307,7 @@ def predict_main():
     today = date.today()
 
     is_auto = (raw_stadium.upper() == 'AUTO' or not raw_stadium) and (str(target_race_no).upper() == 'AUTO' or not target_race_no)
+    silent_mode = (os.environ.get('SILENT_MODE', 'false').lower() == 'true')
 
     if is_auto:
         try:
@@ -341,7 +333,9 @@ def predict_main():
                     if model is not None:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
-                            send_discord_notification(res)
+                            # 自動実行時（サイレントモード）は個別のDiscord通知を送らない
+                            if not silent_mode:
+                                send_discord_notification(res)
                             total_success += 1
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
