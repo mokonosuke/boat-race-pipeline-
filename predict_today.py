@@ -59,6 +59,22 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
+STADIUM_MAP = {
+    '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
+    '浜名湖': '06', '蒲郡': '07', '常滑': '08', '津': '09', '三国': '10',
+    'びわこ': '11', '琵琶湖': '11', '住之江': '12', '尼崎': '13', '鳴門': '14',
+    '丸亀': '15', '児島': '16', '宮島': '17', '徳山': '18', '下関': '19',
+    '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
+}
+
+CODE_TO_STADIUM = {
+    '01': '桐生', '02': '戸田', '03': '江戸川', '04': '平和島', '05': '多摩川',
+    '06': '浜名湖', '07': '蒲郡', '08': '常滑', '09': '津', '10': '三国',
+    '11': 'びわこ', '12': '住之江', '13': '尼崎', '14': '鳴門',
+    '15': '丸亀', '16': '児島', '17': '宮島', '18': '徳山', '19': '下関',
+    '20': '若松', '21': '芦屋', '22': '福岡', '23': '唐津', '24': '大村'
+}
+
 # --- 特徴量スコア計算（展示タイムの相対評価対応） ---
 def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
@@ -97,14 +113,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
-STADIUM_MAP = {
-    '桐生': '01', '戸田': '02', '江戸川': '03', '平和島': '04', '多摩川': '05',
-    '浜名湖': '06', '蒲郡': '07', '常滑': '08', '津': '09', '三国': '10',
-    'びわこ': '11', '琵琶湖': '11', '住之江': '12', '尼崎': '13', '鳴門': '14',
-    '丸亀': '15', '児島': '16', '宮島': '17', '徳山': '18', '下関': '19',
-    '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
-}
-
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
@@ -132,12 +140,15 @@ def run_inference(model, target_stadium, target_race_no):
         stadium_code = int(target_stadium)
         race_no = int(target_race_no)
         
+        s_code_str = str(target_stadium).zfill(2)
+        stadium_name = CODE_TO_STADIUM.get(s_code_str, target_stadium)
+        
         odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
         exacta_odds_info = boatrace.get_odds_exacta_quinella(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
         
         if not odds_info or not race_info:
-            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
+            return f"⚠️ 会場: {stadium_name} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
         exh_list = []
         for b_idx in range(1, 7):
@@ -228,7 +239,7 @@ def run_inference(model, target_stadium, target_race_no):
             })
             
         if not race_combos:
-            return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R は有効な買い目条件に合うデータがありません。"
+            return f"⚠️ 会場: {stadium_name} / 第{target_race_no}R は有効な買い目条件に合うデータがありません。"
             
         df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
@@ -289,7 +300,7 @@ def run_inference(model, target_stadium, target_race_no):
 
         strategy_name = f"17特徴量（展示相対評価・2連単/1着軸強化）"
         
-        lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
+        lines = [f"🎯 **【直前予測・{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
         lines.append("\n**【各艇の1着予想確率】**")
         for b in range(1, 7):
@@ -383,7 +394,8 @@ def predict_main():
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
                 except Exception as e:
-                    err_msg = f"⚠️ {target_stadium} 第{r_no}レースでエラー: {e}"
+                    s_name_err = CODE_TO_STADIUM.get(str(target_stadium).zfill(2), target_stadium)
+                    err_msg = f"⚠️ {s_name_err} 第{r_no}レースでエラー: {e}"
                     print(err_msg)
                     send_discord_notification(err_msg)
                     sys.exit(1)
