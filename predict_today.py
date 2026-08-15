@@ -23,8 +23,11 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- Discord通知関数 ---
+# --- Discord通知関数（サイレントモード時は絶対に通知しない） ---
 def send_discord_notification(message):
+    if os.environ.get("SILENT_MODE", "false").lower() == "true":
+        return
+
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -83,7 +86,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
         kimarite_score = 35.0
 
     raw_exh = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
-    # 展示タイムの相対評価（レース平均との差分：マイナスであるほど速い）
     exh_time = raw_exh - race_avg_exh
     
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
@@ -137,7 +139,6 @@ def run_inference(model, target_stadium, target_race_no):
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
-        # レース全体の平均展示タイムを算出（相対評価用）
         exh_list = []
         for b_idx in range(1, 7):
             b_data = race_info.get(f"boat{b_idx}", {})
@@ -236,14 +237,12 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
-        # --- 各艇の1着予想確率の算出（1着予想軸の強化） ---
         boat_1st_probs = {}
         for b in range(1, 7):
             b_str = str(b)
             p_sum = df_test[df_test['combo'].str.startswith(b_str + '-')]['pred_prob'].sum()
             boat_1st_probs[b] = p_sum
 
-        # --- 3連単の選出 ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
@@ -253,7 +252,6 @@ def run_inference(model, target_stadium, target_race_no):
         top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
         is_trifecta_confident = top_prob >= CONFIDENCE_THRESHOLD
 
-        # --- 2連単の選出（2連単重視・軸のステップアップ） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -293,13 +291,11 @@ def run_inference(model, target_stadium, target_race_no):
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
-        # 1着予想確率の表示
         lines.append("\n**【各艇の1着予想確率】**")
         for b in range(1, 7):
             p = boat_1st_probs.get(b, 0.0)
             lines.append(f"• {b}号艇: {p*100:.1f}%")
 
-        # 2連単を上位に配置（2連単軸のステップアップ）
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 推奨買い目】**")
             for _, row in top_exacta_df.iterrows():
@@ -336,7 +332,6 @@ def predict_main():
     today = date.today()
 
     is_auto = (raw_stadium.upper() == 'AUTO' or not raw_stadium) and (str(target_race_no).upper() == 'AUTO' or not target_race_no)
-    silent_mode = (os.environ.get('SILENT_MODE', 'false').lower() == 'true')
 
     if is_auto:
         try:
@@ -362,8 +357,7 @@ def predict_main():
                     if model is not None:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
-                            if not silent_mode:
-                                send_discord_notification(res)
+                            send_discord_notification(res)
                             total_success += 1
                     else:
                         print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
