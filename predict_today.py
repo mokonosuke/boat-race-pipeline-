@@ -25,6 +25,10 @@ def safe_float(val, default=0.0):
 
 # --- Discord通知関数 ---
 def send_discord_notification(message):
+    # ★サイレントモード（朝の自動予測）が有効な場合は個別の通知を送らない
+    if os.environ.get("SILENT_MODE") == "true":
+        return
+
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -276,7 +280,6 @@ def run_inference(model, target_stadium, target_race_no):
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
-        # 三連単が自信度未満の場合のメッセージ分岐
         if not is_trifecta_confident:
             lines.append(f"🛑 *(※3連単の最高確率が {top_prob*100:.1f}% と低いため、3連単勝負は見送り推奨)*")
             lines.append("\n**【3連単 参考買い目】**")
@@ -286,7 +289,6 @@ def run_inference(model, target_stadium, target_race_no):
         for _, row in top_picks_df.iterrows():
             lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
             
-        # 2連単は常に表示する
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 押さえ・安定買い目】**")
             for _, row in top_exacta_df.iterrows():
