@@ -56,8 +56,8 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
-# --- 特徴量スコア計算 ---
-def get_factor_score(boat_data, assigned_course, stadium_code):
+# --- 特徴量スコア計算（展示タイムの相対評価対応） ---
+def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
     course_key = f"course_{assigned_course}_2nd_rate"
@@ -82,7 +82,10 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     else:
         kimarite_score = 35.0
 
-    exh_time = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
+    raw_exh = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
+    # 展示タイムの相対評価（レース平均との差分：マイナスであるほど速い）
+    exh_time = raw_exh - race_avg_exh
+    
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
@@ -134,6 +137,16 @@ def run_inference(model, target_stadium, target_race_no):
         if not odds_info or not race_info:
             return f"⚠️ 会場コード: {target_stadium} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
         
+        # レース全体の平均展示タイムを算出（相対評価用）
+        exh_list = []
+        for b_idx in range(1, 7):
+            b_data = race_info.get(f"boat{b_idx}", {})
+            if isinstance(b_data, dict):
+                et = safe_float(b_data.get('exhibition_time', 0.0), 0.0)
+                if et > 0:
+                    exh_list.append(et)
+        race_avg_exh = sum(exh_list) / len(exh_list) if exh_list else 6.80
+        
         wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
         wind_dir = str(race_info.get('wind_direction', ''))
 
@@ -177,7 +190,7 @@ def run_inference(model, target_stadium, target_race_no):
                 if not isinstance(boat_data, dict):
                     boat_data = {}
                 
-                l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, stadium_code)
+                l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh)
                 t_l3 += l3
                 t_st += st
                 t_cr += cr
@@ -223,6 +236,14 @@ def run_inference(model, target_stadium, target_race_no):
         df_test['pred_prob'] = preds
         df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
+        # --- 各艇の1着予想確率の算出（1着予想軸の強化） ---
+        boat_1st_probs = {}
+        for b in range(1, 7):
+            b_str = str(b)
+            p_sum = df_test[df_test['combo'].str.startswith(b_str + '-')]['pred_prob'].sum()
+            boat_1st_probs[b] = p_sum
+
+        # --- 3連単の選出 ---
         valid_trifecta = df_test[df_test['ev'] >= 1.0]
         if valid_trifecta.empty:
             valid_trifecta = df_test
@@ -232,6 +253,7 @@ def run_inference(model, target_stadium, target_race_no):
         top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
         is_trifecta_confident = top_prob >= CONFIDENCE_THRESHOLD
 
+        # --- 2連単の選出（2連単重視・軸のステップアップ） ---
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         
@@ -267,24 +289,31 @@ def run_inference(model, target_stadium, target_race_no):
         if not df_exacta.empty:
             top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = f"17特徴量（3連単/2連単ハイブリッド）"
+        strategy_name = f"17特徴量（展示相対評価・2連単/1着軸強化）"
         
         lines = [f"🎯 **【直前予測・{strategy_name}】 会場コード: {target_stadium} / 第{target_race_no}R**"]
         
-        if not is_trifecta_confident:
-            lines.append(f"🛑 *(※3連単の最高確率が {top_prob*100:.1f}% と低いため、3連単勝負は見送り推奨)*")
-            lines.append("\n**【3連単 参考買い目】**")
-        else:
-            lines.append("\n**【3連単 推奨買い目（的中率重視）】**")
+        # 1着予想確率の表示
+        lines.append("\n**【各艇の1着予想確率】**")
+        for b in range(1, 7):
+            p = boat_1st_probs.get(b, 0.0)
+            lines.append(f"• {b}号艇: {p*100:.1f}%")
 
-        for _, row in top_picks_df.iterrows():
-            lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
-            
+        # 2連単を上位に配置（2連単軸のステップアップ）
         if not top_exacta_df.empty:
-            lines.append("\n**【2連単 押さえ・安定買い目】**")
+            lines.append("\n**【2連単 推奨買い目】**")
             for _, row in top_exacta_df.iterrows():
                 odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "算出中"
                 lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 予測確率: {row['pred_prob']*100:.1f}%)")
+
+        if not is_trifecta_confident:
+            lines.append(f"\n🛑 *(※3連単の最高確率が {top_prob*100:.1f}% と低いため、3連単勝負は見送り推奨)*")
+            lines.append("**【3連単 参考買い目】**")
+        else:
+            lines.append("\n**【3連単 推奨買い目】**")
+
+        for _, row in top_picks_df.iterrows():
+            lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
 
@@ -333,7 +362,6 @@ def predict_main():
                     if model is not None:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
-                            # 自動実行時（サイレントモード）は個別のDiscord通知を送らない
                             if not silent_mode:
                                 send_discord_notification(res)
                             total_success += 1
