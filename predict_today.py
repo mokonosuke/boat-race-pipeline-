@@ -1,5 +1,4 @@
 import os
-import requests
 import pandas as pd
 import lightgbm as lgb
 from datetime import date
@@ -22,27 +21,6 @@ def safe_float(val, default=0.0):
         return float(val_str)
     except (ValueError, TypeError):
         return default
-
-# --- Discord通知関数（サイレントモード時は絶対に通知しない強固なガード） ---
-def send_discord_notification(message):
-    if os.environ.get("SILENT_MODE", "false").lower() == "true":
-        print("🤫 サイレントモードのためDiscord通知をスキップしました")
-        return
-
-    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
-    if not webhook_url:
-        print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
-        return
-    
-    payload = {"content": message}
-    try:
-        response = requests.post(webhook_url, json=payload)
-        if response.status_code in [200, 204]:
-            print("💬 Discord通知を送信しました")
-        else:
-            print(f"⚠️ Discord通知の送信に失敗しました: {response.status_code} - {response.text}")
-    except Exception as e:
-        print(f"⚠️ Discord通知でエラーが発生しました: {e}")
 
 # --- 会場特性データ ---
 STADIUM_TRAITS = {
@@ -293,7 +271,8 @@ def predict_main():
                     try:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
-                            send_discord_notification(res)
+                            # Discordへは送らず、GitHubのコンソール画面に文字として出力するだけにする
+                            print(res)
                             total_success += 1
                     except Exception:
                         continue
@@ -305,7 +284,6 @@ def predict_main():
     except Exception as e:
         err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
         print(err_msg)
-        send_discord_notification(err_msg)
         sys.exit(1)
 
 if __name__ == '__main__':
