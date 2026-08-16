@@ -202,11 +202,13 @@ def run_inference(model, target_stadium, target_race_no):
         
         raw_preds = model.predict(X_test)
         
-        # ★ メリハリをしっかりつけるための強力なスケーリング処理
-        mean_p = np.mean(raw_preds)
-        std_p = np.std(raw_preds) + 1e-9
-        z_scores = (raw_preds - mean_p) / std_p
-        exp_preds = np.exp(z_scores * 2.5)
+        # ★ 買い目ごとに確実に確率の差（メリハリ）が出るように個別補正を加える調整
+        # 順列のインデックス（ハッシュ的な微小な変動）を加えて同率を防ぐ
+        np.random.seed(42)
+        unique_noise = np.linspace(0.99, 1.01, len(raw_preds))
+        
+        adjusted_preds = raw_preds * unique_noise
+        exp_preds = np.exp((adjusted_preds - np.mean(adjusted_preds)) / (np.std(adjusted_preds) + 1e-9) * 3.0)
         probs = exp_preds / np.sum(exp_preds)
         
         df_test['pred_prob'] = probs
@@ -231,7 +233,7 @@ def run_inference(model, target_stadium, target_race_no):
 
         strategy_name = "直前予測・17特徴量（展示相対評価・2連単/1着軸強化）"
         
-        lines = [f"🎯 **【{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
+        lines = [f"🎯 **{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
         lines.append("\n**【各艇の1着予想確率】**")
         for b in range(1, 7):
