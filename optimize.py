@@ -20,6 +20,18 @@ except Exception as e:
 
 TARGET_JCD = 11  # びわこ競走場
 
+# --- ヘルパー関数（ハイフンや空文字を安全に処理） ---
+def safe_float(val, default=0.0):
+    if val is None:
+        return default
+    val_str = str(val).replace('m', '').replace('%', '').strip()
+    if val_str == '' or val_str == '-' or val_str == 'ー':
+        return default
+    try:
+        return float(val_str)
+    except (ValueError, TypeError):
+        return default
+
 # --- 会場特性データ ---
 STADIUM_TRAITS = {
     '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
@@ -27,7 +39,7 @@ STADIUM_TRAITS = {
     '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
     '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
     '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
+    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 1.0, 'in_rate': 0.55},
     '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
     '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
     '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
@@ -36,18 +48,18 @@ STADIUM_TRAITS = {
     '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
 }
 
-# --- 特徴量スコア計算（17特徴量対応：全国勝率・2連対率を追加） ---
+# --- 特徴量スコア計算（safe_floatを使用するように変更） ---
 def get_factor_score(boat_data, assigned_course, stadium_code):
-    local_3ren = float(boat_data.get('local_in3rd', 0.0) or 0.0)
-    ave_st = float(boat_data.get('aveST', 0.20) or 0.20)
+    local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
+    ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
     course_key = f"course_{assigned_course}_2nd_rate"
-    course_record_score = float(boat_data.get(course_key, 30.0) or 30.0)
-    motor_rate = float(boat_data.get('motor_2nd_rate', 30.0) or 30.0)
-    boat_rate = float(boat_data.get('boat_2nd_rate', 30.0) or 30.0)
+    course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
+    motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
+    boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     
     # 選手の実力・地力（全国成績）
-    national_win = float(boat_data.get('national_win_rate', 5.0) or 5.0)
-    national_2nd = float(boat_data.get('national_2nd_rate', 30.0) or 30.0)
+    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
+    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -63,8 +75,8 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     else:
         kimarite_score = 35.0
 
-    exh_time = float(boat_data.get('exhibition_time', 6.80) or 6.80)
-    turn_time = float(boat_data.get('turn_time', 6.80) or 6.80)
+    exh_time = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
+    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
     trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
@@ -129,10 +141,7 @@ def fetch_recent_races(start_date, end_date):
             wind_dir = ""
             try:
                 raw_wind_speed = race_info.get('wind_speed', 0.0)
-                if raw_wind_speed is not None:
-                    wind_str = str(raw_wind_speed).replace('m', '').strip()
-                    if wind_str and wind_str != '-':
-                        wind_speed = float(wind_str)
+                wind_speed = safe_float(raw_wind_speed, 0.0)
             except Exception:
                 wind_speed = 0.0
 
@@ -150,7 +159,7 @@ def fetch_recent_races(start_date, end_date):
                     continue
                 try:
                     boats = [int(b) for b in combo.split('-')]
-                    odds_val = float(odds)
+                    odds_val = safe_float(odds, 0.0)
                 except (ValueError, TypeError):
                     continue
                 
