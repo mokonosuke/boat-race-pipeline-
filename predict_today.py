@@ -27,7 +27,6 @@ def safe_float(val, default=0.0):
 def send_discord_notification(message):
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
     
-    # 定期実行（自動の schedule）のときは通知をスキップする
     if event_name == "schedule":
         print("🤫 定期実行のためDiscord通知をスキップしました")
         return
@@ -226,11 +225,18 @@ def run_inference(model, target_stadium, target_race_no):
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
         
+        # 各艇の1着確率を算出
         boat_1st_probs = {}
         for b in range(1, 7):
             b_str = str(b)
             p_sum = df_test[df_test['combo'].str.startswith(b_str + '-')]['pred_prob'].sum()
             boat_1st_probs[b] = p_sum
+
+        # ★ 合計が100%になるように正規化（スケーリング）する修正
+        total_1st_prob = sum(boat_1st_probs.values())
+        if total_1st_prob > 0:
+            for b in boat_1st_probs:
+                boat_1st_probs[b] = boat_1st_probs[b] / total_1st_prob
 
         top_picks_df = df_test.sort_values(by='pred_prob', ascending=False).head(4)
 
@@ -272,12 +278,10 @@ def predict_main():
     boatrace = PyJPBoatrace()
     today = date.today()
 
-    # GitHub Actionsの入力値（個別の会場・レース指定）を取得
     input_stadium = os.environ.get("INPUT_STADIUM", "AUTO").strip()
     input_race_no = os.environ.get("INPUT_RACE_NO", "AUTO").strip()
 
     try:
-        # ★ 会場とレースが個別に指定されている場合（手動実行時など）
         if input_stadium and input_stadium != "AUTO" and input_race_no and input_race_no != "AUTO":
             print(f"🎯 個別予測モード: 会場={input_stadium}, レース={input_race_no}")
             
@@ -298,7 +302,6 @@ def predict_main():
                 print(f"⚠️ 無効な会場指定です: {input_stadium}")
             return
 
-        # ★ 指定がない（AUTO または 定時自動実行）の場合は全レース一括処理
         stadiums_info = boatrace.get_stadiums(today)
         target_stadiums = []
         
@@ -339,4 +342,3 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
-
