@@ -29,12 +29,3 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           python predict_today.py
-
-      - name: Notify completion to Discord
-        if: success()
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          curl -H "Content-Type: application/json" \
-          -d '{"content": "☀️ 今日の全会場・全レースのAI予測データ作成が完了しました！"}' \
-          $DISCORD_WEBHOOK_URL
