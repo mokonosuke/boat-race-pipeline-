@@ -23,10 +23,13 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- Discord通知関数（サイレントモードならスキップ、通常なら送信） ---
+# --- Discord通知関数（定時実行ならスキップ、手動なら送信） ---
 def send_discord_notification(message):
-    if os.environ.get("SILENT_MODE", "false").lower() == "true":
-        print("🤫 サイレントモードのためDiscord通知をスキップしました")
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    
+    # 定期実行（自動の schedule）のときは通知をスキップする
+    if event_name == "schedule":
+        print("🤫 定期実行のためDiscord通知をスキップしました")
         return
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
@@ -235,7 +238,7 @@ def run_inference(model, target_stadium, target_race_no):
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         top_exacta_df = exacta_prob_df.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = "朝の全レース一括予測（出走表ベース）"
+        strategy_name = "AIレース予測"
         
         lines = [f"🎯 **【{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
@@ -269,7 +272,33 @@ def predict_main():
     boatrace = PyJPBoatrace()
     today = date.today()
 
+    # GitHub Actionsの入力値（個別の会場・レース指定）を取得
+    input_stadium = os.environ.get("INPUT_STADIUM", "AUTO").strip()
+    input_race_no = os.environ.get("INPUT_RACE_NO", "AUTO").strip()
+
     try:
+        # ★ 会場とレースが個別に指定されている場合（手動実行時など）
+        if input_stadium and input_stadium != "AUTO" and input_race_no and input_race_no != "AUTO":
+            print(f"🎯 個別予測モード: 会場={input_stadium}, レース={input_race_no}")
+            
+            stadium_code = None
+            if input_stadium in STADIUM_MAP:
+                stadium_code = STADIUM_MAP[input_stadium]
+            else:
+                stadium_code = str(input_stadium).zfill(2)
+
+            if model is not None and stadium_code in CODE_TO_STADIUM:
+                res = run_inference(model, stadium_code, int(input_race_no))
+                if res:
+                    send_discord_notification(res)
+                    print(f"🎯 指定されたレースの予測を通知しました ({CODE_TO_STADIUM[stadium_code]} 第{input_race_no}R)")
+                else:
+                    print("⚠️ 指定されたレースの予測データが取得できませんでした。")
+            else:
+                print(f"⚠️ 無効な会場指定です: {input_stadium}")
+            return
+
+        # ★ 指定がない（AUTO または 定時自動実行）の場合は全レース一括処理
         stadiums_info = boatrace.get_stadiums(today)
         target_stadiums = []
         
@@ -293,7 +322,6 @@ def predict_main():
                     try:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
-                            # 通常時はDiscordへ通知、SILENT_MODE=true（朝の自動実行）のときはスキップされる
                             send_discord_notification(res)
                             total_success += 1
                     except Exception:
@@ -301,7 +329,7 @@ def predict_main():
                 else:
                     print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
         
-        print(f"☀️ 朝の全レース一括予測完了（計 {total_success} レース処理）")
+        print(f"☀️ 全レース一括予測完了（計 {total_success} レース処理）")
             
     except Exception as e:
         err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
@@ -311,3 +339,4 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
+
