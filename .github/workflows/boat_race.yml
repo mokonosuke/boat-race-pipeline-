@@ -34,5 +34,7 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           INPUT_STADIUM: ${{ github.event.inputs.stadium || 'AUTO' }}
           INPUT_RACE_NO: ${{ github.event.inputs.race_no || 'AUTO' }}
+          # 【重要】自動（schedule）のときはサイレント(true)、手動のときは通知(false)に自動切替
+          SILENT_MODE: ${{ github.event_name == 'schedule' && 'true' || 'false' }}
         run: |
           python predict_today.py
