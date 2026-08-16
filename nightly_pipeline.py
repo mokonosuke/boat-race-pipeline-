@@ -85,7 +85,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     
-    # 選手の実力・地力（全国成績）
     national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
     national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
@@ -121,7 +120,6 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
-# 17特徴量に拡張
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
@@ -129,6 +127,23 @@ FEATURES = [
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate'
 ]
+
+# ★ 学習データをCSVに保存する関数
+def save_history_log(df_test, actual_win, stadium_name, race_no, today_str):
+    try:
+        df_test['target'] = (df_test['combo'] == actual_win).astype(int)
+        df_test['date'] = today_str
+        df_test['stadium'] = stadium_name
+        df_test['race_no'] = race_no
+        
+        cols = ['date', 'stadium', 'race_no', 'combo', 'odds', 'target'] + FEATURES
+        log_df = df_test[cols]
+        
+        log_file = 'history_data.csv'
+        file_exists = os.path.exists(log_file)
+        log_df.to_csv(log_file, mode='a', header=not file_exists, index=False, encoding='utf-8')
+    except Exception as e:
+        print(f"⚠️ 履歴保存エラー: {e}")
 
 def nightly_summary_main():
     boatrace = PyJPBoatrace()
@@ -231,6 +246,9 @@ def nightly_summary_main():
                 
                 df_test = pd.DataFrame(race_combos)
                 df_test['pred_prob'] = model.predict(df_test[FEATURES])
+                
+                # ★ ここで本日のレース結果と特徴量をCSVに自動蓄積！
+                save_history_log(df_test, actual_win, s_name, r_no, str(today))
                 
                 df_test['ev'] = df_test['pred_prob'] * df_test['odds']
                 sorted_df = df_test.sort_values('ev', ascending=False).reset_index(drop=True)
