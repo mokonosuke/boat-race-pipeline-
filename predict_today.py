@@ -7,11 +7,13 @@ import sys
 import itertools
 import numpy as np
 
+# --- PyJPBoatraceの読み込み ---
 try:
     from pyjpboatrace import PyJPBoatrace
 except Exception as e:
     print(f"❌ PyJPBoatrace 読み込み失敗: {e}")
 
+# --- 安全な数値変換用ヘルパー関数 ---
 def safe_float(val, default=0.0):
     if val is None:
         return default
@@ -23,6 +25,7 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
+# --- Discord通知関数 ---
 def send_discord_notification(message):
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
     if event_name == "schedule":
@@ -37,10 +40,11 @@ def send_discord_notification(message):
         if response.status_code in [200, 204]:
             print("💬 Discord通知を送信しました")
         else:
-            print(f"⚠️ Discord通知送信失敗: {response.status_code}")
+            print(f"⚠️ Discord通知送信失敗: {response.status_code} - {response.text}")
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
+# --- 会場特性データ ---
 STADIUM_TRAITS = {
     '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
     '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
@@ -66,6 +70,7 @@ STADIUM_MAP = {
 
 CODE_TO_STADIUM = {v: k for k, v in STADIUM_MAP.items()}
 
+# --- 特徴量スコア算出 ---
 def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
@@ -75,9 +80,11 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
     national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
+    
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
     racer_rank_score = rank_map.get(rank_str, 2.0)
+    
     kimarite_type = boat_data.get('primary_kimarite', 'normal')
     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
         kimarite_score = 45.0
@@ -107,6 +114,7 @@ FEATURES = [
     'national_win_rate', 'national_2nd_rate'
 ]
 
+# --- 推論・通知メッセージ作成 ---
 def run_inference(model, target_stadium, target_race_no):
     try:
         boatrace = PyJPBoatrace()
@@ -198,7 +206,7 @@ def run_inference(model, target_stadium, target_race_no):
         mean_p = np.mean(raw_preds)
         std_p = np.std(raw_preds) + 1e-9
         z_scores = (raw_preds - mean_p) / std_p
-        exp_preds = np.exp(z_scores * 2.5) # 係数を上げて差を強調
+        exp_preds = np.exp(z_scores * 2.5)
         probs = exp_preds / np.sum(exp_preds)
         
         df_test['pred_prob'] = probs
@@ -254,6 +262,7 @@ def run_inference(model, target_stadium, target_race_no):
         print(f"Error in inference: {e}")
         return None
 
+# --- メイン処理 ---
 def predict_main():
     model_path = 'model.txt'
     model = None
