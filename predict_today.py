@@ -3,8 +3,8 @@ import requests
 import pandas as pd
 import lightgbm as lgb
 from datetime import date
-import traceback
 import sys
+import itertools
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -23,9 +23,10 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- Discord通知関数（サイレントモード時は絶対に通知しない） ---
+# --- Discord通知関数（サイレントモード時は絶対に通知しない強固なガード） ---
 def send_discord_notification(message):
     if os.environ.get("SILENT_MODE", "false").lower() == "true":
+        print("🤫 サイレントモードのためDiscord通知をスキップしました")
         return
 
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
@@ -75,7 +76,6 @@ CODE_TO_STADIUM = {
     '20': '若松', '21': '芦屋', '22': '福岡', '23': '唐津', '24': '大村'
 }
 
-# --- 特徴量スコア計算（展示タイムの相対評価対応） ---
 def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
@@ -103,7 +103,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
 
     raw_exh = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
     exh_time = raw_exh - race_avg_exh
-    
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
@@ -121,17 +120,6 @@ FEATURES = [
     'national_win_rate', 'national_2nd_rate'
 ]
 
-def parse_stadium(stadium_input):
-    stadium_input = str(stadium_input).strip()
-    if stadium_input.isdigit():
-        return stadium_input.zfill(2)
-    if stadium_input in STADIUM_MAP:
-        return STADIUM_MAP[stadium_input]
-    for name, code in STADIUM_MAP.items():
-        if name in stadium_input:
-            return code
-    return '11'
-
 def run_inference(model, target_stadium, target_race_no):
     try:
         boatrace = PyJPBoatrace()
@@ -143,13 +131,15 @@ def run_inference(model, target_stadium, target_race_no):
         s_code_str = str(target_stadium).zfill(2)
         stadium_name = CODE_TO_STADIUM.get(s_code_str, target_stadium)
         
-        odds_info = boatrace.get_odds_trifecta(d=today, stadium=stadium_code, race=race_no)
-        exacta_odds_info = boatrace.get_odds_exacta_quinella(d=today, stadium=stadium_code, race=race_no)
         race_info = boatrace.get_race_info(d=today, stadium=stadium_code, race=race_no)
-        
-        if not odds_info or not race_info:
-            return f"⚠️ 会場: {stadium_name} / 第{target_race_no}R のデータまたはオッズが取得できませんでした。"
-        
+        if not race_info or not isinstance(race_info, dict):
+            return None
+
+        odds_info = {}
+        for p in itertools.permutations(range(1, 7), 3):
+            combo_str = f"{p[0]}-{p[1]}-{p[2]}"
+            odds_info[combo_str] = 15.0
+
         exh_list = []
         for b_idx in range(1, 7):
             b_data = race_info.get(f"boat{b_idx}", {})
@@ -166,26 +156,12 @@ def run_inference(model, target_stadium, target_race_no):
         is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
         race_combos = []
-        exacta_trifecta_odds = {}
-
         for combo, odds in odds_info.items():
             if not isinstance(combo, str) or '-' not in combo:
                 continue
-            odds_val = safe_float(odds, 0.0)
-            if odds_val <= 0:
-                continue
+            odds_val = 15.0
             
             parts = combo.split('-')
-            if len(parts) == 3:
-                ex_combo = f"{parts[0]}-{parts[1]}"
-                if ex_combo not in exacta_trifecta_odds:
-                    exacta_trifecta_odds[ex_combo] = []
-                exacta_trifecta_odds[ex_combo].append(odds_val)
-            
-            min_odds = 3.0 if combo.startswith('1-') else 5.0
-            if not (min_odds <= odds_val <= 200.0):
-                continue
-            
             try:
                 boats = [int(b) for b in parts]
             except (ValueError, TypeError):
@@ -239,14 +215,13 @@ def run_inference(model, target_stadium, target_race_no):
             })
             
         if not race_combos:
-            return f"⚠️ 会場: {stadium_name} / 第{target_race_no}R は有効な買い目条件に合うデータがありません。"
+            return None
             
         df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
         
         preds = model.predict(X_test)
         df_test['pred_prob'] = preds
-        df_test['ev'] = df_test['pred_prob'] * df_test['odds']
         
         boat_1st_probs = {}
         for b in range(1, 7):
@@ -254,53 +229,15 @@ def run_inference(model, target_stadium, target_race_no):
             p_sum = df_test[df_test['combo'].str.startswith(b_str + '-')]['pred_prob'].sum()
             boat_1st_probs[b] = p_sum
 
-        valid_trifecta = df_test[df_test['ev'] >= 1.0]
-        if valid_trifecta.empty:
-            valid_trifecta = df_test
-        top_picks_df = valid_trifecta.sort_values(by='pred_prob', ascending=False).head(4)
-
-        CONFIDENCE_THRESHOLD = 0.12
-        top_prob = top_picks_df.iloc[0]['pred_prob'] if not top_picks_df.empty else 0.0
-        is_trifecta_confident = top_prob >= CONFIDENCE_THRESHOLD
+        top_picks_df = df_test.sort_values(by='pred_prob', ascending=False).head(4)
 
         df_test['exacta_combo'] = df_test['combo'].apply(lambda x: '-'.join(x.split('-')[:2]))
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
-        
-        exacta_list = []
-        for _, row in exacta_prob_df.iterrows():
-            ex_combo = row['exacta_combo']
-            prob = row['pred_prob']
-            
-            odds_val = 0.0
-            if exacta_odds_info and isinstance(exacta_odds_info, dict):
-                for k, v in exacta_odds_info.items():
-                    if k.replace('=', '-') == ex_combo or k == ex_combo:
-                        odds_val = safe_float(v, 0.0)
-                        break
-            
-            if odds_val <= 0 and ex_combo in exacta_trifecta_odds:
-                odds_list = exacta_trifecta_odds[ex_combo]
-                if odds_list:
-                    inv_sum = sum(1.0 / o for o in odds_list if o > 0)
-                    if inv_sum > 0:
-                        odds_val = 1.0 / inv_sum
-            
-            ev = prob * odds_val if odds_val > 0 else 0.0
-            exacta_list.append({
-                'exacta_combo': ex_combo,
-                'odds': odds_val,
-                'pred_prob': prob,
-                'ev': ev
-            })
+        top_exacta_df = exacta_prob_df.sort_values(by='pred_prob', ascending=False).head(2)
 
-        df_exacta = pd.DataFrame(exacta_list)
-        top_exacta_df = pd.DataFrame()
-        if not df_exacta.empty:
-            top_exacta_df = df_exacta.sort_values(by='pred_prob', ascending=False).head(2)
-
-        strategy_name = f"17特徴量（展示相対評価・2連単/1着軸強化）"
+        strategy_name = "朝の全レース一括予測（出走表ベース）"
         
-        lines = [f"🎯 **【直前予測・{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
+        lines = [f"🎯 **【{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
         lines.append("\n**【各艇の1着予想確率】**")
         for b in range(1, 7):
@@ -310,28 +247,18 @@ def run_inference(model, target_stadium, target_race_no):
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 推奨買い目】**")
             for _, row in top_exacta_df.iterrows():
-                odds_text = f"{row['odds']:.1f}倍" if row['odds'] > 0 else "算出中"
-                lines.append(f"• **{row['exacta_combo']}** (オッズ: {odds_text} / 予測確率: {row['pred_prob']*100:.1f}%)")
+                lines.append(f"• **{row['exacta_combo']}** (予測確率: {row['pred_prob']*100:.1f}%)")
 
-        if not is_trifecta_confident:
-            lines.append(f"\n🛑 *(※3連単の最高確率が {top_prob*100:.1f}% と低いため、3連単勝負は見送り推奨)*")
-            lines.append("**【3連単 参考買い目】**")
-        else:
-            lines.append("\n**【3連単 推奨買い目】**")
-
+        lines.append("\n**【3連単 推奨買い目】**")
         for _, row in top_picks_df.iterrows():
-            lines.append(f"• **{row['combo']}** (オッズ: {row['odds']:.1f}倍 / 予測確率: {row['pred_prob']*100:.1f}%)")
+            lines.append(f"• **{row['combo']}** (予測確率: {row['pred_prob']*100:.1f}%)")
             
         return "\n".join(lines)
 
-    except Exception as e:
-        error_msg = traceback.format_exc()
-        raise Exception(f"推論処理中にエラーが発生しました: {e}\n{error_msg}")
+    except Exception:
+        return None
 
 def predict_main():
-    raw_stadium = os.environ.get('INPUT_STADIUM', 'AUTO').strip()
-    target_race_no = os.environ.get('INPUT_RACE_NO', 'AUTO').strip()
-
     model_path = 'model.txt'
     model = None
     if os.path.exists(model_path):
@@ -342,63 +269,45 @@ def predict_main():
     boatrace = PyJPBoatrace()
     today = date.today()
 
-    is_auto = (raw_stadium.upper() == 'AUTO' or not raw_stadium) and (str(target_race_no).upper() == 'AUTO' or not target_race_no)
-
-    if is_auto:
-        try:
-            stadiums_info = boatrace.get_stadiums(today)
-            target_stadiums = []
+    try:
+        stadiums_info = boatrace.get_stadiums(today)
+        target_stadiums = []
+        
+        for s_name, info in stadiums_info.items():
+            if s_name == 'date':
+                continue
+            code = STADIUM_MAP.get(s_name)
+            if code:
+                target_stadiums.append((code, s_name))
+        
+        if not target_stadiums:
+            print("ℹ️ 本日開催のレース場はありません。")
+            return
             
-            for s_name, info in stadiums_info.items():
-                if s_name == 'date':
-                    continue
-                code = STADIUM_MAP.get(s_name)
-                if code:
-                    target_stadiums.append((code, s_name))
+        total_success = 0
+        for stadium_code, s_name in target_stadiums:
+            print(f"🔍 処理中: {s_name}")
             
-            if not target_stadiums:
-                print("ℹ️ 本日開催のレース場はありません。")
-                return
-                
-            total_success = 0
-            for stadium_code, s_name in target_stadiums:
-                print(f"🔍 処理中: {s_name}")
-                
-                for r_no in range(1, 13):
-                    if model is not None:
+            for r_no in range(1, 13):
+                if model is not None:
+                    try:
                         res = run_inference(model, stadium_code, r_no)
                         if res:
                             send_discord_notification(res)
                             total_success += 1
-                    else:
-                        print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+                    except Exception:
+                        continue
+                else:
+                    print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
+        
+        print(f"☀️ 朝の全レース一括予測完了（計 {total_success} レース処理）")
             
-            if total_success > 0:
-                print(f"☀️ 自動予測完了（計 {total_success} レース処理）")
-                
-        except Exception as e:
-            err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
-            print(err_msg)
-            send_discord_notification(err_msg)
-            sys.exit(1)
-    else:
-        target_stadium = parse_stadium(raw_stadium)
-        if target_stadium:
-            races_to_run = list(range(1, 13)) if str(target_race_no).upper() == 'AUTO' else [int(target_race_no)]
-            
-            for r_no in races_to_run:
-                try:
-                    if model is not None:
-                        prediction_text = run_inference(model, target_stadium, r_no)
-                        send_discord_notification(prediction_text)
-                    else:
-                        print("⚠️ モデルファイルが存在しないため、推論をスキップしました。")
-                except Exception as e:
-                    s_name_err = CODE_TO_STADIUM.get(str(target_stadium).zfill(2), target_stadium)
-                    err_msg = f"⚠️ {s_name_err} 第{r_no}レースでエラー: {e}"
-                    print(err_msg)
-                    send_discord_notification(err_msg)
-                    sys.exit(1)
+    except Exception as e:
+        err_msg = f"⚠️ 自動判定処理で致命的なエラーが発生しました: {e}"
+        print(err_msg)
+        send_discord_notification(err_msg)
+        sys.exit(1)
 
 if __name__ == '__main__':
     predict_main()
+
