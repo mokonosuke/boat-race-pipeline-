@@ -5,6 +5,7 @@ import lightgbm as lgb
 from datetime import date
 import sys
 import itertools
+import numpy as np
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -222,8 +223,14 @@ def run_inference(model, target_stadium, target_race_no):
         df_test = pd.DataFrame(race_combos)
         X_test = df_test[FEATURES]
         
-        preds = model.predict(X_test)
-        df_test['pred_prob'] = preds
+        raw_preds = model.predict(X_test)
+        
+        # ★ 確率にメリハリをつけるためのスケーリング処理
+        scaled_preds = raw_preds / 0.12
+        exp_preds = np.exp(scaled_preds - np.max(scaled_preds))
+        probs = exp_preds / np.sum(exp_preds)
+        
+        df_test['pred_prob'] = probs
         
         # 各艇の1着確率を算出
         boat_1st_probs = {}
@@ -232,7 +239,6 @@ def run_inference(model, target_stadium, target_race_no):
             p_sum = df_test[df_test['combo'].str.startswith(b_str + '-')]['pred_prob'].sum()
             boat_1st_probs[b] = p_sum
 
-        # ★ 合計が100%になるように正規化（スケーリング）する修正
         total_1st_prob = sum(boat_1st_probs.values())
         if total_1st_prob > 0:
             for b in boat_1st_probs:
@@ -244,7 +250,7 @@ def run_inference(model, target_stadium, target_race_no):
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         top_exacta_df = exacta_prob_df.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = "AIレース予測"
+        strategy_name = "直前予測・17特徴量（展示相対評価・2連単/1着軸強化）"
         
         lines = [f"🎯 **【{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
@@ -256,15 +262,25 @@ def run_inference(model, target_stadium, target_race_no):
         if not top_exacta_df.empty:
             lines.append("\n**【2連単 推奨買い目】**")
             for _, row in top_exacta_df.iterrows():
-                lines.append(f"• **{row['exacta_combo']}** (予測確率: {row['pred_prob']*100:.1f}%)")
+                p_val = row['pred_prob'] * 100
+                calc_odds = max(1.5, round(75.0 / (p_val + 1.5), 1))
+                lines.append(f"• **{row['exacta_combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
 
-        lines.append("\n**【3連単 推奨買い目】**")
+        top_3ren_prob = top_picks_df.iloc[0]['pred_prob'] * 100 if not top_picks_df.empty else 0.0
+        
+        if top_3ren_prob < 4.0:
+            lines.append(f"\n🛑 (※3連単の最高確率が{top_3ren_prob:.1f}%と低いため、３連単勝負は見送り推奨)")
+
+        lines.append("\n**【3連単 参考買い目】**" if top_3ren_prob < 4.0 else "\n**【3連単 推奨買い目】**")
         for _, row in top_picks_df.iterrows():
-            lines.append(f"• **{row['combo']}** (予測確率: {row['pred_prob']*100:.1f}%)")
+            p_val = row['pred_prob'] * 100
+            calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
+            lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
             
         return "\n".join(lines)
 
-    except Exception:
+    except Exception as e:
+        print(f"Error in inference: {e}")
         return None
 
 def predict_main():
