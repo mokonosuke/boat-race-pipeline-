@@ -118,15 +118,14 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
-# --- 19個の特徴量に拡張 ---
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate',
-    'grade_score',    # 追加：レースグレード（一般〜SG）
-    'is_rough_sign'   # 追加：トリセツの荒れるサイン点灯フラグ
+    'grade_score',
+    'is_rough_sign'
 ]
 
 # --- 推論・通知メッセージ作成 ---
@@ -143,7 +142,6 @@ def run_inference(model, target_stadium, target_race_no):
         if not race_info or not isinstance(race_info, dict):
             return None
 
-        # --- グレードと荒れフラグの算出 ---
         grade_str = str(race_info.get('grade', '一般'))
         grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
         grade_score = grade_map.get(grade_str, 1)
@@ -215,8 +213,8 @@ def run_inference(model, target_stadium, target_race_no):
                 'wind_speed': wind_speed,
                 'is_headwind': is_headwind,
                 'is_tailwind': is_tailwind,
-                'grade_score': grade_score,       # 追加
-                'is_rough_sign': is_rough_sign     # 追加
+                'grade_score': grade_score,
+                'is_rough_sign': is_rough_sign
             })
             
         if not race_combos:
@@ -255,9 +253,8 @@ def run_inference(model, target_stadium, target_race_no):
 
         strategy_name = "直前予測・19特徴量（トリセツ＆グレード・展示相対評価統合）"
         
-        lines = [f"🎯 **{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
+        lines = [f"🎯 **[{strategy_name}]**\n📍 **{stadium_name} / 第{target_race_no}R**"]
         
-        # トリセツ・荒れサインの検知コメントを通知に付与
         if is_rough_sign == 1:
             lines.append("⚠️ **【トリセツ警報：荒れるサイン点灯】** 風速条件クリア！波乱・センター強襲警戒")
         if grade_score >= 4:
@@ -285,6 +282,20 @@ def run_inference(model, target_stadium, target_race_no):
             p_val = row['pred_prob'] * 100
             calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
             lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
+            
+        # ★ AIの判断理由（根拠）セクションの追加
+        reason_lines = []
+        if is_rough_sign == 1:
+            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター勢の台頭を強く反映。")
+        else:
+            reason_lines.append("• **安定コンディション**: 風の影響が少なく、本来の地力やインコースの信頼度を重視した評価。")
+            
+        if grade_score >= 4:
+            reason_lines.append(f"• **{grade_str}戦補正**: トップレーサーの高い調整力と機力差を大きく加味。")
+            
+        reason_lines.append("• **19特徴量統合**: 当地勝率、モーター2連率、展示タイム（相対評価）、コース別実績を総合的に分析。")
+        
+        lines.append("\n🤖 **AIの判断理由・根拠**:\n" + "\n".join(reason_lines))
             
         return "\n".join(lines)
 
