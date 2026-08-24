@@ -12,6 +12,8 @@ jobs:
       contents: write # モデルファイルをコミットするための権限
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 履歴をすべて取得してリモートとのズレを防ぐ
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,6 +27,12 @@ jobs:
       - name: Run training
         run: |
           python optimize.py  # 学習用スクリプト
+          
+      - name: Pull latest changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase
           
       - name: Commit and push model
         uses: stefanzweifel/git-auto-commit-action@v5
