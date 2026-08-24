@@ -2,7 +2,7 @@ name: Model Training
 
 on:
   schedule:
-    - cron: '0 16 * * *' # 日本時間 毎日 01:00
+    - cron: '0 16 * * *'  # 日本時間 毎日 01:00
   workflow_dispatch:
 
 jobs:
@@ -11,39 +11,33 @@ jobs:
     permissions:
       contents: write # モデルファイルをコミットするための権限
     steps:
-      - uses: actions/checkout@v4
+      - name: actions/checkout@v4
         with:
           fetch-depth: 0 # 履歴をすべて取得してリモートとのズレを防ぐ
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-          
+
       - name: Install dependencies
         run: |
           pip install pyjpboatrace lightgbm pandas scikit-learn requests
-          
+
       - name: Run training
         run: |
-          python optimize.py  # 学習用スクリプト
-          
-      - name: Pull latest changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase
-          
+          python optimize.py
+
       - name: Commit and push model
-        uses: stefanzweifel/git-auto-commit-action@v5
+        uses: stefanzweifel/git-auto-commit-action@v4
         with:
           commit_message: "Auto-update model file"
-          file_pattern: "model.txt"
+          file_pattern: 'model.txt'
 
       - name: Send Discord Notification
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           curl -H "Content-Type: application/json" \
-               -d '{"content": "🌙 **【モデル自動学習完了】** 夜中のトレーニングとモデルファイルの更新が正常に完了しました！"}' \
+               -d '{"content": "🌙 **【モデル自動更新完了】** 夜中のトレーニングとモデルファイルの更新が正常に完了しました！✨"}' \
                $DISCORD_WEBHOOK_URL
