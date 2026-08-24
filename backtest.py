@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 拡張機械学習パイプライン開始（15特徴量・会場特性・展示対応版）")
+print("🚀 [1/5] 拡張機械学習パイプライン開始（19特徴量・トリセツ＆グレード統合版）")
 
 import os
 from datetime import date, timedelta
@@ -24,20 +24,32 @@ except Exception as e:
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL", "")
 TARGET_JCD = 11  # びわこ競走場
 
-# --- 会場特性データ ---
+# --- 会場特性データ（荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
-    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
-    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
-    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
-    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
-    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
-    '13': {'water_type': 0.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
-    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
-    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
-    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
-    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
-    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+    '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
+    '03': {'water_type': 0.5, 'in_rate': 0.40, 'wind_limit_rough': 3.0}, 
+    '04': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '05': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.5}, 
+    '06': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '07': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '08': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0},
+    '09': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '10': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '11': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5}, 
+    '12': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.5},
+    '13': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '14': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '15': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '16': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '17': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '18': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5},
+    '19': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '20': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '21': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5}, 
+    '22': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '23': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '24': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 5.0}
 }
 
 def get_factor_score(boat_data, assigned_course, stadium_code):
@@ -47,6 +59,8 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     course_record_score = float(boat_data.get(course_key, 30.0) or 30.0)
     motor_rate = float(boat_data.get('motor_2nd_rate', 30.0) or 30.0)
     boat_rate = float(boat_data.get('boat_2nd_rate', 30.0) or 30.0)
+    national_win = float(boat_data.get('national_win_rate', 5.0) or 5.0)
+    national_2nd = float(boat_data.get('national_2nd_rate', 30.0) or 30.0)
     
     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
@@ -66,9 +80,11 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     turn_time = float(boat_data.get('turn_time', 6.80) or 6.80)
     
     s_key = str(stadium_code).zfill(2)
-    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5, 'wind_limit_rough': 4.0})
 
-    return local_3ren, ave_st, course_record_score, kimarite_score, motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, trait['water_type'], trait['in_rate']
+    return (local_3ren, ave_st, course_record_score, kimarite_score, 
+            motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
+            trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
 def extract_trifecta_result(result_data):
     if not result_data:
@@ -93,7 +109,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最新データ（展示・会場特性含む）を取得します...")
+    print("🚀 APIから最新データ（展示・風速・グレード等）を取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -122,6 +138,11 @@ def fetch_recent_races(start_date, end_date):
             if not actual_win:
                 continue
 
+            # --- グレードと荒れフラグの算出 ---
+            grade_str = str(race_info.get('grade', '一般'))
+            grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
+            grade_score = grade_map.get(grade_str, 1)
+
             wind_speed = 0.0
             wind_dir = ""
             try:
@@ -138,6 +159,10 @@ def fetch_recent_races(start_date, end_date):
             except Exception:
                 wind_dir = ""
 
+            s_key = str(TARGET_JCD).zfill(2)
+            trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
+            is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
+
             is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
             is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
@@ -152,13 +177,14 @@ def fetch_recent_races(start_date, end_date):
                     continue
                 
                 t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
+                t_nat_win, t_nat_2nd = 0, 0
                 water_val, in_rate_val = 0.5, 0.5
                 
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate = get_factor_score(boat_data, assigned_course, TARGET_JCD)
+                    l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, TARGET_JCD)
                     t_l3 += l3
                     t_st += st
                     t_cr += cr
@@ -168,26 +194,32 @@ def fetch_recent_races(start_date, end_date):
                     t_rnk += rnk
                     t_exh += exh
                     t_turn += turn
+                    t_nat_win += nat_w
+                    t_nat_2nd += nat_2
                     water_val = water
                     in_rate_val = in_rate
                 
                 race_combos.append({
                     'combo': combo,
                     'odds': odds_val,
-                    'avg_l3': t_l3 / 3,
-                    'avg_st': t_st / 3,
-                    'avg_cr': t_cr / 3,
-                    'avg_kim': t_kim / 3,
-                    'avg_motor': t_mot / 3,
-                    'avg_boat': t_bot / 3,
-                    'avg_rank': t_rnk / 3,
+                    'local_3ren': t_l3 / 3,
+                    'st': t_st / 3,
+                    'course': t_cr / 3,
+                    'kimarite': t_kim / 3,
+                    'motor': t_mot / 3,
+                    'boat': t_bot / 3,
+                    'racer_rank': t_rnk / 3,
                     'exh_time': t_exh / 3,
                     'turn_time': t_turn / 3,
                     'water_type': water_val,
                     'in_rate': in_rate_val,
+                    'national_win_rate': t_nat_win / 3,
+                    'national_2nd_rate': t_nat_2nd / 3,
                     'wind_speed': wind_speed,
                     'is_headwind': is_headwind,
-                    'is_tailwind': is_tailwind
+                    'is_tailwind': is_tailwind,
+                    'grade_score': grade_score,
+                    'is_rough_sign': is_rough_sign
                 })
             
             if race_combos:
@@ -204,7 +236,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_backtest_ml(cache_data):
-    print("🤖 [3/5] 15特徴量モデルの訓練とバックテストを実行中...")
+    print("🤖 [3/5] 19特徴量モデルの訓練とバックテストを実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -216,20 +248,24 @@ def run_backtest_ml(cache_data):
                 'race_id': race_idx,
                 'combo': bet['combo'],
                 'odds': bet['odds'],
-                'local_3ren': bet['avg_l3'],
-                'st': bet['avg_st'],
-                'course': bet['avg_cr'],
-                'kimarite': bet['avg_kim'],
-                'motor': bet['avg_motor'],
-                'boat': bet['avg_boat'],
-                'racer_rank': bet['avg_rank'],
+                'local_3ren': bet['local_3ren'],
+                'st': bet['st'],
+                'course': bet['course'],
+                'kimarite': bet['kimarite'],
+                'motor': bet['motor'],
+                'boat': bet['boat'],
+                'racer_rank': bet['racer_rank'],
                 'exh_time': bet['exh_time'],
                 'turn_time': bet['turn_time'],
                 'water_type': bet['water_type'],
                 'in_rate': bet['in_rate'],
+                'national_win_rate': bet['national_win_rate'],
+                'national_2nd_rate': bet['national_2nd_rate'],
                 'wind_speed': bet['wind_speed'],
                 'is_headwind': bet['is_headwind'],
                 'is_tailwind': bet['is_tailwind'],
+                'grade_score': bet['grade_score'],
+                'is_rough_sign': bet['is_rough_sign'],
                 'is_win': 1 if bet['combo'] == actual_win else 0,
                 'actual_win': actual_win
             })
@@ -243,7 +279,9 @@ def run_backtest_ml(cache_data):
         'local_3ren', 'st', 'course', 'kimarite', 
         'motor', 'boat', 'racer_rank', 'odds',
         'wind_speed', 'is_headwind', 'is_tailwind',
-        'exh_time', 'turn_time', 'water_type', 'in_rate'
+        'exh_time', 'turn_time', 'water_type', 'in_rate',
+        'national_win_rate', 'national_2nd_rate',
+        'grade_score', 'is_rough_sign'
     ]
     X = df[features]
     y = df['is_win']
@@ -314,7 +352,7 @@ if __name__ == "__main__":
     
     if results:
         summary_text = (
-            f"🎯 **【15特徴量統合版・実行結果】**\n"
+            f"🎯 **【19特徴量統合版・バックテスト結果】**\n"
             f"・検証対象期間: {start_d} 〜 {end_d}\n"
             f"・有効投票レース数: {results['total_races']}件\n"
             f"・回収率: **{results['roi']}%**\n"
@@ -329,3 +367,4 @@ if __name__ == "__main__":
                 print("✅ Discordへ結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
+
