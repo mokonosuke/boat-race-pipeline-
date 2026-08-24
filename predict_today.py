@@ -118,6 +118,7 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
+# ★ 19個の特徴量リストに戻す
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
@@ -194,6 +195,7 @@ def run_inference(model, target_stadium, target_race_no):
                 water_val = water
                 in_rate_val = in_rate
             
+            # 19個すべての特徴量をデータフレーム用辞書に含める
             race_combos.append({
                 'combo': combo,
                 'odds': odds_val,
@@ -283,7 +285,7 @@ def run_inference(model, target_stadium, target_race_no):
             calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
             lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
             
-        # ★ AIの判断理由（根拠）セクションの追加
+        # AIの判断理由（根拠）セクション
         reason_lines = []
         if is_rough_sign == 1:
             reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター勢の台頭を強く反映。")
