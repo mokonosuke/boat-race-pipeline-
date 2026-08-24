@@ -1,4 +1,4 @@
-Name: Nightly Summary and Train
+name: Nightly Summary and Train
 
 on:
   schedule:
