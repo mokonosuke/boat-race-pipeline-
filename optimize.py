@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 最適化パイプライン開始（17特徴量・全国成績対応版）")
+print("🚀 [1/5] 最適化パイプライン開始（19特徴量・トリセツ＆グレード統合版）")
 
 import os
 from datetime import date, timedelta
@@ -32,23 +32,35 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- 会場特性データ ---
+# --- 会場特性データ（荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
-    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
-    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
-    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
-    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
-    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 1.0, 'in_rate': 0.55},
-    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
-    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
-    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
-    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
-    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
-    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+    '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
+    '03': {'water_type': 0.5, 'in_rate': 0.40, 'wind_limit_rough': 3.0}, 
+    '04': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '05': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.5}, 
+    '06': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '07': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '08': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0},
+    '09': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '10': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '11': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5}, 
+    '12': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.5},
+    '13': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '14': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '15': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '16': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '17': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '18': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5},
+    '19': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '20': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '21': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5}, 
+    '22': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '23': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '24': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 5.0}
 }
 
-# --- 特徴量スコア計算（safe_floatを使用するように変更） ---
+# --- 特徴量スコア計算 ---
 def get_factor_score(boat_data, assigned_course, stadium_code):
     local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
     ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
@@ -57,7 +69,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
     boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
     
-    # 選手の実力・地力（全国成績）
     national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
     national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
     
@@ -79,7 +90,7 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
-    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5, 'wind_limit_rough': 4.0})
 
     return (local_3ren, ave_st, course_record_score, kimarite_score, 
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
@@ -108,7 +119,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最適化用データ（17特徴量）を取得します...")
+    print("🚀 APIから最適化用データ（19特徴量）を取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -137,14 +148,23 @@ def fetch_recent_races(start_date, end_date):
             if not actual_win:
                 continue
 
+            # --- グレードと荒れフラグの算出 ---
+            grade_str = str(race_info.get('grade', '一般'))
+            grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
+            grade_score = grade_map.get(grade_str, 1)
+
             wind_speed = 0.0
-            wind_dir = ""
             try:
                 raw_wind_speed = race_info.get('wind_speed', 0.0)
                 wind_speed = safe_float(raw_wind_speed, 0.0)
             except Exception:
                 wind_speed = 0.0
 
+            s_key = str(TARGET_JCD).zfill(2)
+            trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
+            is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
+
+            wind_dir = ""
             try:
                 wind_dir = str(race_info.get('wind_direction', ''))
             except Exception:
@@ -204,7 +224,9 @@ def fetch_recent_races(start_date, end_date):
                     'national_2nd_rate': t_nat_2nd / 3,
                     'wind_speed': wind_speed,
                     'is_headwind': is_headwind,
-                    'is_tailwind': is_tailwind
+                    'is_tailwind': is_tailwind,
+                    'grade_score': grade_score,
+                    'is_rough_sign': is_rough_sign
                 })
             
             if race_combos:
@@ -221,7 +243,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_optimization(cache_data):
-    print("🤖 [3/5] 17特徴量最適化モデルの訓練を実行中...")
+    print("🤖 [3/5] 19特徴量最適化モデルの訓練を実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -246,6 +268,8 @@ def run_optimization(cache_data):
                 'wind_speed': bet['wind_speed'],
                 'is_headwind': bet['is_headwind'],
                 'is_tailwind': bet['is_tailwind'],
+                'grade_score': bet['grade_score'],
+                'is_rough_sign': bet['is_rough_sign'],
                 'is_win': 1 if bet['combo'] == actual_win else 0
             })
             
@@ -254,13 +278,14 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
-    # 17特徴量リスト
+    # 19特徴量リスト
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
         'motor', 'boat', 'racer_rank', 'odds',
         'wind_speed', 'is_headwind', 'is_tailwind',
         'exh_time', 'turn_time', 'water_type', 'in_rate',
-        'national_win_rate', 'national_2nd_rate'
+        'national_win_rate', 'national_2nd_rate',
+        'grade_score', 'is_rough_sign'
     ]
     
     X = df[features]
@@ -278,7 +303,7 @@ def run_optimization(cache_data):
     model.fit(X, y)
     
     model.booster_.save_model('model.txt')
-    print("✅ 学習完了: 17特徴量の最適化モデルを 'model.txt' として保存しました。")
+    print("✅ 学習完了: 19特徴量の最適化モデルを 'model.txt' として保存しました。")
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
@@ -287,3 +312,4 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] 最適化パイプライン終了")
+
