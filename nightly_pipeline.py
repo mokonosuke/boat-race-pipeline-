@@ -16,7 +16,7 @@ def safe_float(val, default=0.0):
     if val is None:
         return default
     val_str = str(val).replace('m', '').replace('%', '').strip()
-    if val_str == '' or val_str == '-':
+    if val_str == '' or val_str == '-' or val_str == 'ー':
         return default
     try:
         return float(val_str)
@@ -61,20 +61,32 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
-# --- 会場特性データ ---
+# --- 会場特性データ（荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
-    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
-    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
-    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
-    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
-    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 0.0, 'in_rate': 0.55},
-    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
-    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
-    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
-    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
-    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
-    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+    '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
+    '03': {'water_type': 0.5, 'in_rate': 0.40, 'wind_limit_rough': 3.0}, 
+    '04': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '05': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.5}, 
+    '06': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '07': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '08': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0},
+    '09': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '10': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '11': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5}, 
+    '12': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.5},
+    '13': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '14': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '15': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '16': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '17': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '18': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5},
+    '19': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '20': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '21': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5}, 
+    '22': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '23': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '24': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 5.0}
 }
 
 def get_factor_score(boat_data, assigned_course, stadium_code):
@@ -106,7 +118,7 @@ def get_factor_score(boat_data, assigned_course, stadium_code):
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
-    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5, 'wind_limit_rough': 4.0})
 
     return (local_3ren, ave_st, course_record_score, kimarite_score, 
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
@@ -120,12 +132,14 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+# --- 19個の特徴量リスト ---
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
-    'national_win_rate', 'national_2nd_rate'
+    'national_win_rate', 'national_2nd_rate',
+    'grade_score', 'is_rough_sign'
 ]
 
 # ★ 学習データをCSVに保存する関数
@@ -176,7 +190,7 @@ def nightly_summary_main():
     max_odds_hit = 0.0
     miss_ranks = []
 
-    print(f"📊 17特徴量・期待値ベースロジックで集計を開始します (全{len(target_stadiums)}会場)...")
+    print(f"📊 19特徴量・期待値ベースロジックで集計を開始します (全{len(target_stadiums)}会場)...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
@@ -195,10 +209,19 @@ def nightly_summary_main():
                 if not actual_win:
                     continue
                 
+                # --- グレードと荒れフラグの算出 ---
+                grade_str = str(race_info.get('grade', '一般'))
+                grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
+                grade_score = grade_map.get(grade_str, 1)
+
                 wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
                 wind_dir = str(race_info.get('wind_direction', ''))
                 is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
                 is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
+
+                s_key = str(stadium_code).zfill(2)
+                trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
+                is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
                 race_combos = []
                 for combo, odds in odds_info.items():
@@ -238,7 +261,8 @@ def nightly_summary_main():
                         'racer_rank': t_rnk/3, 'exh_time': t_exh/3, 'turn_time': t_turn/3,
                         'water_type': water_val, 'in_rate': in_rate_val,
                         'national_win_rate': t_nat_win/3, 'national_2nd_rate': t_nat_2nd/3,
-                        'wind_speed': wind_speed, 'is_headwind': is_headwind, 'is_tailwind': is_tailwind
+                        'wind_speed': wind_speed, 'is_headwind': is_headwind, 'is_tailwind': is_tailwind,
+                        'grade_score': grade_score, 'is_rough_sign': is_rough_sign
                     })
                 
                 if not race_combos:
@@ -247,7 +271,7 @@ def nightly_summary_main():
                 df_test = pd.DataFrame(race_combos)
                 df_test['pred_prob'] = model.predict(df_test[FEATURES])
                 
-                # ★ ここで本日のレース結果と特徴量をCSVに自動蓄積！
+                # ★ 本日のレース結果と特徴量をCSVに自動蓄積！
                 save_history_log(df_test, actual_win, s_name, r_no, str(today))
                 
                 df_test['ev'] = df_test['pred_prob'] * df_test['odds']
@@ -278,7 +302,7 @@ def nightly_summary_main():
     avg_miss_rank = (sum(miss_ranks) / len(miss_ranks)) if miss_ranks else 0.0
     
     summary_msg = (
-        f"📊 **【本日のAI予測・結果まとめ (17特徴量・期待値ベース)】**\n"
+        f"📊 **【本日のAI予測・結果まとめ (19特徴量・期待値ベース)】**\n"
         f"• 対象レース数: {total_races}R\n"
         f"• 的中数: {hit_count}R (的中率: {accuracy:.1f}%)\n"
         f"• 最高的中配当: {max_odds_hit:.1f}倍\n"
