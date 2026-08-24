@@ -44,20 +44,32 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
-# --- 会場特性データ ---
+# --- 会場特性データ（トリセツの荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
-    '01': {'water_type': 0.0, 'in_rate': 0.50}, '02': {'water_type': 0.0, 'in_rate': 0.40},
-    '03': {'water_type': 0.5, 'in_rate': 0.40}, '04': {'water_type': 0.5, 'in_rate': 0.45},
-    '05': {'water_type': 0.0, 'in_rate': 0.50}, '06': {'water_type': 1.0, 'in_rate': 0.50},
-    '07': {'water_type': 1.0, 'in_rate': 0.55}, '08': {'water_type': 1.0, 'in_rate': 0.55},
-    '09': {'water_type': 1.0, 'in_rate': 0.50}, '10': {'water_type': 0.0, 'in_rate': 0.45},
-    '11': {'water_type': 0.0, 'in_rate': 0.45}, '12': {'water_type': 1.0, 'in_rate': 0.55},
-    '13': {'water_type': 1.0, 'in_rate': 0.55}, '14': {'water_type': 1.0, 'in_rate': 0.45},
-    '15': {'water_type': 1.0, 'in_rate': 0.50}, '16': {'water_type': 1.0, 'in_rate': 0.45},
-    '17': {'water_type': 1.0, 'in_rate': 0.50}, '18': {'water_type': 1.0, 'in_rate': 0.60},
-    '19': {'water_type': 1.0, 'in_rate': 0.55}, '20': {'water_type': 1.0, 'in_rate': 0.50},
-    '21': {'water_type': 1.0, 'in_rate': 0.60}, '22': {'water_type': 0.5, 'in_rate': 0.45},
-    '23': {'water_type': 1.0, 'in_rate': 0.55}, '24': {'water_type': 1.0, 'in_rate': 0.60}
+    '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
+    '03': {'water_type': 0.5, 'in_rate': 0.40, 'wind_limit_rough': 3.0}, 
+    '04': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '05': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.5}, 
+    '06': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '07': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '08': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0},
+    '09': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '10': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '11': {'water_type': 0.0, 'in_rate': 0.45, 'wind_limit_rough': 3.5}, 
+    '12': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.5},
+    '13': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '14': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '15': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '16': {'water_type': 1.0, 'in_rate': 0.45, 'wind_limit_rough': 4.0},
+    '17': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
+    '18': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5},
+    '19': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '20': {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0},
+    '21': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 4.5}, 
+    '22': {'water_type': 0.5, 'in_rate': 0.45, 'wind_limit_rough': 3.5},
+    '23': {'water_type': 1.0, 'in_rate': 0.55, 'wind_limit_rough': 4.0}, 
+    '24': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 5.0}
 }
 
 STADIUM_MAP = {
@@ -100,18 +112,21 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
     
     s_key = str(stadium_code).zfill(2)
-    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5})
+    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5, 'wind_limit_rough': 4.0})
 
     return (local_3ren, ave_st, course_record_score, kimarite_score, 
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
+# --- 19個の特徴量に拡張 ---
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 'odds',
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
-    'national_win_rate', 'national_2nd_rate'
+    'national_win_rate', 'national_2nd_rate',
+    'grade_score',    # 追加：レースグレード（一般〜SG）
+    'is_rough_sign'   # 追加：トリセツの荒れるサイン点灯フラグ
 ]
 
 # --- 推論・通知メッセージ作成 ---
@@ -128,6 +143,15 @@ def run_inference(model, target_stadium, target_race_no):
         if not race_info or not isinstance(race_info, dict):
             return None
 
+        # --- グレードと荒れフラグの算出 ---
+        grade_str = str(race_info.get('grade', '一般'))
+        grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
+        grade_score = grade_map.get(grade_str, 1)
+
+        wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
+        trait = STADIUM_TRAITS.get(s_code_str, {'wind_limit_rough': 4.0})
+        is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
+
         exh_list = []
         for b_idx in range(1, 7):
             b_data = race_info.get(f"boat{b_idx}", {})
@@ -137,7 +161,6 @@ def run_inference(model, target_stadium, target_race_no):
                     exh_list.append(et)
         race_avg_exh = sum(exh_list) / len(exh_list) if exh_list else 6.80
         
-        wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
         wind_dir = str(race_info.get('wind_direction', ''))
         is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
         is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
@@ -191,7 +214,9 @@ def run_inference(model, target_stadium, target_race_no):
                 'national_2nd_rate': t_nat_2nd / 3,
                 'wind_speed': wind_speed,
                 'is_headwind': is_headwind,
-                'is_tailwind': is_tailwind
+                'is_tailwind': is_tailwind,
+                'grade_score': grade_score,       # 追加
+                'is_rough_sign': is_rough_sign     # 追加
             })
             
         if not race_combos:
@@ -202,8 +227,6 @@ def run_inference(model, target_stadium, target_race_no):
         
         raw_preds = model.predict(X_test)
         
-        # ★ 買い目ごとに確実に確率の差（メリハリ）が出るように個別補正を加える調整
-        # 順列のインデックス（ハッシュ的な微小な変動）を加えて同率を防ぐ
         np.random.seed(42)
         unique_noise = np.linspace(0.99, 1.01, len(raw_preds))
         
@@ -213,7 +236,6 @@ def run_inference(model, target_stadium, target_race_no):
         
         df_test['pred_prob'] = probs
         
-        # 各艇の1着確率を算出
         boat_1st_probs = {}
         for b in range(1, 7):
             b_str = str(b)
@@ -231,10 +253,16 @@ def run_inference(model, target_stadium, target_race_no):
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         top_exacta_df = exacta_prob_df.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = "直前予測・17特徴量（展示相対評価・2連単/1着軸強化）"
+        strategy_name = "直前予測・19特徴量（トリセツ＆グレード・展示相対評価統合）"
         
         lines = [f"🎯 **{strategy_name}】 {stadium_name} / 第{target_race_no}R**"]
         
+        # トリセツ・荒れサインの検知コメントを通知に付与
+        if is_rough_sign == 1:
+            lines.append("⚠️ **【トリセツ警報：荒れるサイン点灯】** 風速条件クリア！波乱・センター強襲警戒")
+        if grade_score >= 4:
+            lines.append(f"🏆 **【{grade_str}戦】** トップ機力・調整勝負")
+
         lines.append("\n**【各艇の1着予想確率】**")
         for b in range(1, 7):
             p = boat_1st_probs.get(b, 0.0)
