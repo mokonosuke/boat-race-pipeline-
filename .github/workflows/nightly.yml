@@ -1,4 +1,4 @@
-name: Nightly Summary and Train
+Name: Nightly Summary and Train
 
 on:
   schedule:
@@ -9,12 +9,16 @@ on:
 jobs:
   nightly-job:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # 履歴ファイルをコミットするための権限
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 履歴をすべて取得してズレを防ぐ
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -33,6 +37,7 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase
           git add history_data.csv
           git commit -m "Auto-update history data [skip ci]" || exit 0
           git push
