@@ -34,10 +34,7 @@ jobs:
           python nightly_pipeline.py
 
       - name: Commit and push history data
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase
-          git add history_data.csv
-          git commit -m "Auto-update history data [skip ci]" || exit 0
-          git push
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Auto-update history data [skip ci]"
+          file_pattern: 'history_data.csv'
