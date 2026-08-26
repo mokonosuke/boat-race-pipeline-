@@ -18,15 +18,15 @@ STADIUM_TRAITS = {
     '23': {'wind_limit_rough': 4.0}, '24': {'wind_limit_rough': 5.0}
 }
 
-# --- 17個から19個の特徴量へ拡張 ---
+# --- オッズを除外した18個の特徴量リスト ---
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
-    'motor', 'boat', 'racer_rank', 'odds',
+    'motor', 'boat', 'racer_rank', 
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate',
-    'grade_score',    # 追加：レースグレード（一般〜SG）
-    'is_rough_sign'   # 追加：トリセツの荒れるサイン点灯フラグ
+    'grade_score',    # レースグレード（一般〜SG）
+    'is_rough_sign'   # トリセツの荒れるサイン点灯フラグ
 ]
 
 def retrain_model():
@@ -35,7 +35,7 @@ def retrain_model():
         print("⚠️ 学習データ（history_data.csv）がまだありません。")
         return
 
-    print("📊 蓄積された履歴データからモデルを再学習します...")
+    print("📊 蓄積された履歴データからモデルを再学習します（18特徴量・オッズ除外版）...")
     df = pd.read_csv(log_file)
     
     # --- 新しい特徴量の自動生成・補完処理 ---
@@ -81,7 +81,7 @@ def retrain_model():
     
     # 新しいモデルを保存
     model.save_model('model.txt')
-    print("🎯 モデルの再学習が完了し、トリセツ要素を統合した新しいmodel.txtを更新しました！")
+    print("🎯 モデルの再学習が完了し、18特徴量（オッズ除外）の新しいmodel.txtを更新しました！")
 
 if __name__ == '__main__':
     retrain_model()
