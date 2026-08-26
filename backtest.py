@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 拡張機械学習パイプライン開始（19特徴量・トリセツ＆グレード統合版）")
+print("🚀 [1/5] 拡張機械学習パイプライン開始（18特徴量・オッズ除外＆バックテスト版）")
 
 import os
 from datetime import date, timedelta
@@ -236,7 +236,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_backtest_ml(cache_data):
-    print("🤖 [3/5] 19特徴量モデルの訓練とバックテストを実行中...")
+    print("🤖 [3/5] 18特徴量モデル（オッズ除外）の訓練とバックテストを実行中...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -247,7 +247,7 @@ def run_backtest_ml(cache_data):
                 'rno': race['rno'],
                 'race_id': race_idx,
                 'combo': bet['combo'],
-                'odds': bet['odds'],
+                'odds': bet['odds'],  # バックテストの回収率計算・フィルタリング用に保持
                 'local_3ren': bet['local_3ren'],
                 'st': bet['st'],
                 'course': bet['course'],
@@ -275,9 +275,10 @@ def run_backtest_ml(cache_data):
         print("❌ 学習データが空です。")
         return None
 
+    # 18特徴量（featuresから 'odds' を除外）
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
-        'motor', 'boat', 'racer_rank', 'odds',
+        'motor', 'boat', 'racer_rank', 
         'wind_speed', 'is_headwind', 'is_tailwind',
         'exh_time', 'turn_time', 'water_type', 'in_rate',
         'national_win_rate', 'national_2nd_rate',
@@ -352,7 +353,7 @@ if __name__ == "__main__":
     
     if results:
         summary_text = (
-            f"🎯 **【19特徴量統合版・バックテスト結果】**\n"
+            f"🎯 **【18特徴量（オッズ除外版）・バックテスト結果】**\n"
             f"・検証対象期間: {start_d} 〜 {end_d}\n"
             f"・有効投票レース数: {results['total_races']}件\n"
             f"・回収率: **{results['roi']}%**\n"
@@ -367,4 +368,3 @@ if __name__ == "__main__":
                 print("✅ Discordへ結果を送信しました。")
             except Exception as e:
                 print(f"⚠️ Discord通知失敗: {e}")
-
