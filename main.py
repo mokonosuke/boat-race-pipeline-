@@ -1,10 +1,10 @@
 import pandas as pd
 import lightgbm as lgb
 
-# --- 更新後の特徴量リスト（19個に拡張） ---
+# --- 更新後の特徴量リスト（18個・オッズ除外版） ---
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
-    'motor', 'boat', 'racer_rank', 'odds',
+    'motor', 'boat', 'racer_rank', 
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate',
@@ -12,7 +12,7 @@ FEATURES = [
 ]
 
 def main():
-    print("=== 学習パイプライン開始（19特徴量・トリセツ＆グレード統合版） ===")
+    print("=== 学習パイプライン開始（18特徴量・オッズ除外版） ===")
     
     # ここにデータ読み込み処理が必要です
     # 例: df = pd.read_csv('your_data.csv')
@@ -21,7 +21,7 @@ def main():
     # 新しい特徴量を df に格納する処理（お手元のデータ構造に合わせて調整してください）
     # df['local_3ren'] = ...
     # df['st'] = ...
-    # ...（全19項目を df に追加）...
+    # ...（全18項目を df に追加）...
     
     # ※特に重要：
     # 'national_win_rate', 'national_2nd_rate', 'grade_score', 'is_rough_sign' などの
