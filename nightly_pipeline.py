@@ -132,9 +132,10 @@ STADIUM_MAP = {
     '若松': '20', '芦屋': '21', '福岡': '22', '唐津': '23', '大村': '24'
 }
 
+# ★ オッズを除外した18個の特徴量リスト
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
-    'motor', 'boat', 'racer_rank', 'odds',
+    'motor', 'boat', 'racer_rank',
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate',
@@ -176,7 +177,7 @@ def generate_ai_commentary(total_races, total_wind_speed, total_rough_signs):
     reason_text = (
         "🤖 **AIの判断理由・傾向分析**:\n"
         "• **地力とモーター評価**: 「local_3ren（当地勝率）」と「motor（モーター2連率）」が高い軸艇を的確に捉えた構成が的中を牽引しました。\n"
-        "• **荒れサイン＆グレードの反映**: 「is_rough_sign（荒れフラグ）」と「grade_score（レースグレード）」を19特徴量として同時学習させたことで、気象・番組条件に合わせた期待値のブラッシュアップに成功しています。"
+        "• **荒れサイン＆グレードの反映**: 「is_rough_sign（荒れフラグ）」と「grade_score（レースグレード）」を特徴量として学習させたことで、気象・番組条件に合わせた期待値のブラッシュアップに成功しています。"
     )
     
     return trend_text, reason_text
@@ -216,7 +217,7 @@ def nightly_summary_main():
     total_wind_speed = 0.0
     total_rough_signs = 0
 
-    print(f"📊 19特徴量・期待値ベース＆コメント自動生成付きで集計を開始します (全{len(target_stadiums)}会場)...")
+    print(f"📊 18特徴量（オッズなし）・期待値ベース＆コメント自動生成付きで集計を開始します (全{len(target_stadiums)}会場)...")
 
     for stadium_code, s_name, title in target_stadiums:
         s_code_int = int(stadium_code)
@@ -335,7 +336,7 @@ def nightly_summary_main():
     trend_comment, reason_comment = generate_ai_commentary(total_races, total_wind_speed, total_rough_signs)
     
     summary_msg = (
-        f"📊 **【本日のAI予測・結果まとめ (19特徴量対応)】**\n\n"
+        f"📊 **【本日のAI予測・結果まとめ (18特徴量対応)】**\n\n"
         f"{trend_comment}\n\n"
         f"📈 **結果概要**:\n"
         f"• 対象レース数: {total_races}R\n"
