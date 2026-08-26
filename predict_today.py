@@ -18,7 +18,7 @@ def safe_float(val, default=0.0):
     if val is None:
         return default
     val_str = str(val).replace('m', '').replace('%', '').strip()
-    if val_str == '' or val_str == '-':
+    if val_str == '' or val_str == '-' or val_str == 'ー':
         return default
     try:
         return float(val_str)
@@ -44,7 +44,7 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
-# --- 会場特性データ（トリセツの荒れる風速限界値を追加） ---
+# --- 会場特性データ（荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
     '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
     '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
@@ -118,10 +118,10 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
-# ★ 19個の特徴量リストに戻す
+# ★ オッズを除外した正確な18個の特徴量リスト
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
-    'motor', 'boat', 'racer_rank', 'odds',
+    'motor', 'boat', 'racer_rank', 
     'wind_speed', 'is_headwind', 'is_tailwind',
     'exh_time', 'turn_time', 'water_type', 'in_rate',
     'national_win_rate', 'national_2nd_rate',
@@ -167,7 +167,6 @@ def run_inference(model, target_stadium, target_race_no):
         race_combos = []
         for p in itertools.permutations(range(1, 7), 3):
             combo = f"{p[0]}-{p[1]}-{p[2]}"
-            odds_val = 15.0
             
             t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
             t_nat_win, t_nat_2nd = 0, 0
@@ -195,10 +194,9 @@ def run_inference(model, target_stadium, target_race_no):
                 water_val = water
                 in_rate_val = in_rate
             
-            # 19個すべての特徴量をデータフレーム用辞書に含める
+            # 18個の特徴量のみを辞書に含める
             race_combos.append({
                 'combo': combo,
-                'odds': odds_val,
                 'local_3ren': t_l3 / 3,
                 'st': t_st / 3,
                 'course': t_cr / 3,
@@ -253,7 +251,7 @@ def run_inference(model, target_stadium, target_race_no):
         exacta_prob_df = df_test.groupby('exacta_combo')['pred_prob'].sum().reset_index()
         top_exacta_df = exacta_prob_df.sort_values(by='pred_prob', ascending=False).head(2)
 
-        strategy_name = "直前予測・19特徴量（トリセツ＆グレード・展示相対評価統合）"
+        strategy_name = "直前予測・18特徴量（オッズ除外・展示相対評価統合）"
         
         lines = [f"🎯 **[{strategy_name}]**\n📍 **{stadium_name} / 第{target_race_no}R**"]
         
@@ -285,17 +283,16 @@ def run_inference(model, target_stadium, target_race_no):
             calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
             lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
             
-        # AIの判断理由（根拠）セクション
         reason_lines = []
         if is_rough_sign == 1:
-            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター勢の台頭を強く反映。")
+            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター勢の台頭を反映。")
         else:
-            reason_lines.append("• **安定コンディション**: 風の影響が少なく、本来の地力やインコースの信頼度を重視した評価。")
+            reason_lines.append("• **安定コンディション**: 風の影響が少なく、本来の地力やインコースの信頼度を重視。")
             
         if grade_score >= 4:
-            reason_lines.append(f"• **{grade_str}戦補正**: トップレーサーの高い調整力と機力差を大きく加味。")
+            reason_lines.append(f"• **{grade_str}戦補正**: トップレーサーの高い調整力と機力差を加味。")
             
-        reason_lines.append("• **19特徴量統合**: 当地勝率、モーター2連率、展示タイム（相対評価）、コース別実績を総合的に分析。")
+        reason_lines.append("• **18特徴量（オッズ除外）**: 当地勝率、モーター2連率、展示タイム（相対評価）、コース別実績を純粋に分析。")
         
         lines.append("\n🤖 **AIの判断理由・根拠**:\n" + "\n".join(reason_lines))
             
@@ -369,3 +366,4 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
+
