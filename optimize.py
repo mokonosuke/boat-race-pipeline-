@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 最適化パイプライン開始（19特徴量・トリセツ＆グレード統合版）")
+print("🚀 [1/5] 最適化パイプライン開始（18特徴量・オッズ除外版）")
 
 import os
 from datetime import date, timedelta
@@ -119,7 +119,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最適化用データ（19特徴量）を取得します...")
+    print("🚀 APIから最適化用データ（18特徴量・オッズ除外版）を取得します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -179,7 +179,6 @@ def fetch_recent_races(start_date, end_date):
                     continue
                 try:
                     boats = [int(b) for b in combo.split('-')]
-                    odds_val = safe_float(odds, 0.0)
                 except (ValueError, TypeError):
                     continue
                 
@@ -208,7 +207,6 @@ def fetch_recent_races(start_date, end_date):
                 
                 race_combos.append({
                     'combo': combo,
-                    'odds': odds_val,
                     'avg_l3': t_l3 / 3,
                     'avg_st': t_st / 3,
                     'avg_cr': t_cr / 3,
@@ -243,7 +241,7 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_optimization(cache_data):
-    print("🤖 [3/5] 19特徴量最適化モデルの訓練を実行中...")
+    print("🤖 [3/5] 18特徴量最適化モデルの訓練を実行中（オッズ除外）...")
     
     dataset = []
     for race_idx, race in enumerate(cache_data):
@@ -251,7 +249,6 @@ def run_optimization(cache_data):
         for bet in race['combos']:
             dataset.append({
                 'combo': bet['combo'],
-                'odds': bet['odds'],
                 'local_3ren': bet['avg_l3'],
                 'st': bet['avg_st'],
                 'course': bet['avg_cr'],
@@ -259,15 +256,15 @@ def run_optimization(cache_data):
                 'motor': bet['avg_motor'],
                 'boat': bet['avg_boat'],
                 'racer_rank': bet['avg_rank'],
+                'wind_speed': bet['wind_speed'],
+                'is_headwind': bet['is_headwind'],
+                'is_tailwind': bet['is_tailwind'],
                 'exh_time': bet['exh_time'],
                 'turn_time': bet['turn_time'],
                 'water_type': bet['water_type'],
                 'in_rate': bet['in_rate'],
                 'national_win_rate': bet['national_win_rate'],
                 'national_2nd_rate': bet['national_2nd_rate'],
-                'wind_speed': bet['wind_speed'],
-                'is_headwind': bet['is_headwind'],
-                'is_tailwind': bet['is_tailwind'],
                 'grade_score': bet['grade_score'],
                 'is_rough_sign': bet['is_rough_sign'],
                 'is_win': 1 if bet['combo'] == actual_win else 0
@@ -278,10 +275,10 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
-    # 19特徴量リスト
+    # 18特徴量リスト（oddsを完全に削除）
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
-        'motor', 'boat', 'racer_rank', 'odds',
+        'motor', 'boat', 'racer_rank', 
         'wind_speed', 'is_headwind', 'is_tailwind',
         'exh_time', 'turn_time', 'water_type', 'in_rate',
         'national_win_rate', 'national_2nd_rate',
@@ -303,7 +300,7 @@ def run_optimization(cache_data):
     model.fit(X, y)
     
     model.booster_.save_model('model.txt')
-    print("✅ 学習完了: 19特徴量の最適化モデルを 'model.txt' として保存しました。")
+    print("✅ 学習完了: 18特徴量の最適化モデルを 'model.txt' として保存しました。")
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
@@ -312,4 +309,3 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] 最適化パイプライン終了")
-
