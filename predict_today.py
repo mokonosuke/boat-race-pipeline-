@@ -270,8 +270,7 @@ def run_inference(model, target_stadium, target_race_no):
             lines.append("\n**【2連単 推奨買い目】**")
             for _, row in top_exacta_df.iterrows():
                 p_val = row['pred_prob'] * 100
-                calc_odds = max(1.5, round(75.0 / (p_val + 1.5), 1))
-                lines.append(f"• **{row['exacta_combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
+                lines.append(f"• **{row['exacta_combo']}** (予測確率: {p_val:.1f}%)")
 
         top_3ren_prop = top_picks_df.iloc[0]['pred_prob'] * 100 if not top_picks_df.empty else 0.0
         
@@ -281,10 +280,8 @@ def run_inference(model, target_stadium, target_race_no):
         lines.append("\n**【3連単 参考買い目】**" if top_3ren_prop < 4.0 else "\n**【3連単 推奨買い目】**")
         for _, row in top_picks_df.iterrows():
             p_val = row['pred_prob'] * 100
-            calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
-            lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
+            lines.append(f"• **{row['combo']}** (予測確率: {p_val:.1f}%)")
             
-        # ★ 理由・根拠を予測結果（1着確率の傾向）と連動させるよう修正
         reason_lines = []
         if is_rough_sign == 1:
             reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター・アウト勢の台頭を反映。")
