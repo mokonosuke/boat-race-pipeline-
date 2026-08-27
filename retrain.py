@@ -83,5 +83,18 @@ def retrain_model():
     model.save_model('model.txt')
     print("🎯 モデルの再学習が完了し、18特徴量（オッズ除外）の新しいmodel.txtを更新しました！")
 
+    # ==========================================
+    # 📊 ステップ2：特徴量重要度（Feature Importance）の表示
+    # ==========================================
+    print("\n📊 【18特徴量 重要度ランキング（Gainベース）】")
+    features = model.feature_name()
+    importance = model.feature_importance(importance_type='gain')
+    importance_df = pd.DataFrame({
+        'feature': features,
+        'importance': importance
+    }).sort_values(by='importance', ascending=False)
+    print(importance_df.to_string(index=False))
+    print("--------------------------------------------------\n")
+
 if __name__ == '__main__':
     retrain_model()
