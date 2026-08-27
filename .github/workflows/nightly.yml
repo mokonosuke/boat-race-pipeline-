@@ -2,8 +2,8 @@ name: Nightly Summary and Train
 
 on:
   schedule:
-    # 毎日 22:00 JST (世界時 13:00) に実行
-    - cron: '0 13 * * *'
+    # 毎日 0:00 JST (世界時 15:00) に実行
+    - cron: '0 15 * * *'
   workflow_dispatch:
 
 jobs:
