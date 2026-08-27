@@ -46,7 +46,7 @@ def send_discord_notification(message):
     except Exception as e:
         print(f"⚠️ Discord通知エラー: {e}")
 
-# --- 会場特性データ（荒れる風速限界値を追加） ---
+# --- 会場特性データ ---
 STADIUM_TRAITS = {
     '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
     '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
@@ -120,7 +120,7 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
-# ★ オッズを除外した正確な18個の特徴量リスト
+# ★ 18個の特徴量リスト（オッズ除外）
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 
@@ -284,11 +284,20 @@ def run_inference(model, target_stadium, target_race_no):
             calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
             lines.append(f"• **{row['combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
             
+        # ★ 理由・根拠を予測結果（1着確率の傾向）と連動させるよう修正
         reason_lines = []
         if is_rough_sign == 1:
-            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター勢の台頭を反映。")
+            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター・アウト勢の台頭を反映。")
         else:
-            reason_lines.append("• **安定コンディション**: 風の影響が少なく、本来の地力やインコースの信頼度を重視。")
+            top_1st_boat = max(boat_1st_probs, key=boat_1st_probs.get) if boat_1st_probs else 1
+            top_1st_prob = boat_1st_probs.get(top_1st_boat, 0.0) * 100
+            
+            if top_1st_boat == 1 and top_1st_prob >= 35.0:
+                reason_lines.append("• **イン信頼コンディション**: 1号艇の軸信頼度が高く、イン主体の堅実な展開を予想。")
+            elif top_1st_boat in [5, 6]:
+                reason_lines.append(f"• **波乱・外枠警戒**: 安定板や水面・機力傾向を反映し、{top_1st_boat}号艇 が頭に浮上する高配当狙いの構成。")
+            else:
+                reason_lines.append(f"• **混戦コンディション**: 抜けた軸が不在のため、各艇の機力やコース実績に基づく展開を分析。")
             
         if grade_score >= 4:
             reason_lines.append(f"• **{grade_str}戦補正**: トップレーサーの高い調整力と機力差を加味。")
