@@ -120,7 +120,6 @@ def get_factor_score(boat_data, assigned_course, stadium_code, race_avg_exh):
             motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
             trait['water_type'], trait['in_rate'], national_win, national_2nd)
 
-# ★ 18個の特徴量リスト（オッズ除外）
 FEATURES = [
     'local_3ren', 'st', 'course', 'kimarite', 
     'motor', 'boat', 'racer_rank', 
@@ -257,7 +256,7 @@ def run_inference(model, target_stadium, target_race_no):
         lines = [f"🎯 **[{strategy_name}]**\n📍 **{stadium_name} / 第{target_race_no}R**"]
         
         if is_rough_sign == 1:
-            lines.append("⚠️ **【トリセツ警報：荒れるサイン点灯】** 風速条件クリア！波乱・センター強襲警戒")
+            lines.append(f"⚠️ **【トリセツ警報：荒れるサイン点灯】** 風速{wind_speed}m（基準値超過）！波乱・センター強襲警戒")
         if grade_score >= 4:
             lines.append(f"🏆 **【{grade_str}戦】** トップ機力・調整勝負")
 
@@ -282,24 +281,25 @@ def run_inference(model, target_stadium, target_race_no):
             p_val = row['pred_prob'] * 100
             lines.append(f"• **{row['combo']}** (予測確率: {p_val:.1f}%)")
             
+        # --- 理由の動的生成（会場の風・水面・気象状況を正確に反映） ---
         reason_lines = []
         if is_rough_sign == 1:
-            reason_lines.append("• **荒れサイン点灯**: 風速が会場の限界値を超えており、インの信頼度低下やセンター・アウト勢の台頭を反映。")
+            reason_lines.append(f"• **荒れサイン点灯**: 風速{wind_speed}mの強風・荒天条件を反映し、インの信頼度低下やセンター・アウト勢の台頭を評価。")
         else:
             top_1st_boat = max(boat_1st_probs, key=boat_1st_probs.get) if boat_1st_probs else 1
             top_1st_prob = boat_1st_probs.get(top_1st_boat, 0.0) * 100
             
             if top_1st_boat == 1 and top_1st_prob >= 35.0:
-                reason_lines.append("• **イン信頼コンディション**: 1号艇の軸信頼度が高く、イン主体の堅実な展開を予想。")
+                reason_lines.append(f"• **イン信頼コンディション**: 風速{wind_speed}mの落ち着いた水面下で1号艇の軸信頼度を高く評価。")
             elif top_1st_boat in [5, 6]:
-                reason_lines.append(f"• **波乱・外枠警戒**: 安定板や水面・機力傾向を反映し、{top_1st_boat}号艇 が頭に浮上する高配当狙いの構成。")
+                reason_lines.append(f"• **外枠・センター警戒**: 風速{wind_speed}mの風向や水面状況、各艇の機力・コース実績を反映し、{top_1st_boat}号艇が頭に浮上する構成。")
             else:
-                reason_lines.append(f"• **混戦コンディション**: 抜けた軸が不在のため、各艇の機力やコース実績に基づく展開を分析。")
+                reason_lines.append(f"• **混戦コンディション**: 風速{wind_speed}mの気象条件や各艇のコース別実績・機力を総合的に分析。")
             
         if grade_score >= 4:
             reason_lines.append(f"• **{grade_str}戦補正**: トップレーサーの高い調整力と機力差を加味。")
             
-        reason_lines.append("• **18特徴量（オッズ除外）**: 当地勝率、モーター2連率、展示タイム（相対評価）、コース別実績を純粋に分析。")
+        reason_lines.append(f"• **18特徴量分析**: 当地勝率、モーター2連率、展示タイム（相対評価）、コース別実績（風速{wind_speed}m / 風向: {wind_dir or '無風・微風'}）を純粋に解析。")
         
         lines.append("\n🤖 **AIの判断理由・根拠**:\n" + "\n".join(reason_lines))
             
