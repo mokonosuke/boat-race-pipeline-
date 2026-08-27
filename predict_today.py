@@ -25,12 +25,14 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- Discord通知関数 ---
+# --- Discord通知関数（サイレントモード対応版） ---
 def send_discord_notification(message):
+    silent_mode = os.environ.get("SILENT_MODE", "false").lower() == "true"
     event_name = os.environ.get("GITHUB_EVENT_NAME", "")
-    if event_name == "schedule":
-        print("🤫 定期実行のためDiscord通知をスキップしました")
+    if silent_mode or event_name == "schedule":
+        print("🤫 サイレントモードまたは定期実行のためDiscord通知をスキップしました")
         return
+        
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
         print("⚠️ DISCORD_WEBHOOK_URL が設定されていません")
@@ -194,7 +196,6 @@ def run_inference(model, target_stadium, target_race_no):
                 water_val = water
                 in_rate_val = in_rate
             
-            # 18個の特徴量のみを辞書に含める
             race_combos.append({
                 'combo': combo,
                 'local_3ren': t_l3 / 3,
@@ -272,12 +273,12 @@ def run_inference(model, target_stadium, target_race_no):
                 calc_odds = max(1.5, round(75.0 / (p_val + 1.5), 1))
                 lines.append(f"• **{row['exacta_combo']}** (オッズ: {calc_odds}倍 / 予測確率: {p_val:.1f}%)")
 
-        top_3ren_prob = top_picks_df.iloc[0]['pred_prob'] * 100 if not top_picks_df.empty else 0.0
+        top_3ren_prop = top_picks_df.iloc[0]['pred_prob'] * 100 if not top_picks_df.empty else 0.0
         
-        if top_3ren_prob < 4.0:
-            lines.append(f"\n🛑 (※3連単の最高確率が{top_3ren_prob:.1f}%と低いため、３連単勝負は見送り推奨)")
+        if top_3ren_prop < 4.0:
+            lines.append(f"\n🛑 (※3連単の最高確率が{top_3ren_prop:.1f}%と低いため、３連単勝負は見送り推奨)")
 
-        lines.append("\n**【3連単 参考買い目】**" if top_3ren_prob < 4.0 else "\n**【3連単 推奨買い目】**")
+        lines.append("\n**【3連単 参考買い目】**" if top_3ren_prop < 4.0 else "\n**【3連単 推奨買い目】**")
         for _, row in top_picks_df.iterrows():
             p_val = row['pred_prob'] * 100
             calc_odds = max(2.0, round(150.0 / (p_val + 0.8), 1))
@@ -366,4 +367,3 @@ def predict_main():
 
 if __name__ == '__main__':
     predict_main()
-
