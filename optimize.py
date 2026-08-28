@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 最適化パイプライン開始（18特徴量・オッズ除外版）")
+print("🚀 [1/5] 最適化パイプライン開始（キー構造デバッグ版）")
 
 import os
 from datetime import date, timedelta
@@ -20,7 +20,6 @@ except Exception as e:
 
 TARGET_JCD = 11  # びわこ競走場
 
-# --- ヘルパー関数（ハイフンや空文字を安全に処理） ---
 def safe_float(val, default=0.0):
     if val is None:
         return default
@@ -32,7 +31,6 @@ def safe_float(val, default=0.0):
     except (ValueError, TypeError):
         return default
 
-# --- 会場特性データ（荒れる風速限界値を追加） ---
 STADIUM_TRAITS = {
     '01': {'water_type': 0.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0}, 
     '02': {'water_type': 0.0, 'in_rate': 0.40, 'wind_limit_rough': 3.5},
@@ -60,42 +58,6 @@ STADIUM_TRAITS = {
     '24': {'water_type': 1.0, 'in_rate': 0.60, 'wind_limit_rough': 5.0}
 }
 
-# --- 特徴量スコア計算 ---
-def get_factor_score(boat_data, assigned_course, stadium_code):
-    local_3ren = safe_float(boat_data.get('local_in3rd', 0.0), 0.0)
-    ave_st = safe_float(boat_data.get('aveST', 0.20), 0.20)
-    course_key = f"course_{assigned_course}_2nd_rate"
-    course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
-    motor_rate = safe_float(boat_data.get('motor_2nd_rate', 30.0), 30.0)
-    boat_rate = safe_float(boat_data.get('boat_2nd_rate', 30.0), 30.0)
-    
-    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
-    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
-    
-    rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
-    rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
-    racer_rank_score = rank_map.get(rank_str, 2.0)
-    
-    kimarite_type = boat_data.get('primary_kimarite', 'normal')
-    if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
-        kimarite_score = 45.0
-    elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
-        kimarite_score = 45.0
-    elif kimarite_type == 'nige' and assigned_course == 1:
-        kimarite_score = 50.0
-    else:
-        kimarite_score = 35.0
-
-    exh_time = safe_float(boat_data.get('exhibition_time', 6.80), 6.80)
-    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
-    
-    s_key = str(stadium_code).zfill(2)
-    trait = STADIUM_TRAITS.get(s_key, {'water_type': 0.5, 'in_rate': 0.5, 'wind_limit_rough': 4.0})
-
-    return (local_3ren, ave_st, course_record_score, kimarite_score, 
-            motor_rate, boat_rate, racer_rank_score, exh_time, turn_time, 
-            trait['water_type'], trait['in_rate'], national_win, national_2nd)
-
 def extract_trifecta_result(result_data):
     if not result_data:
         return None
@@ -119,7 +81,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIから最適化用データ（18特徴量・オッズ除外版）を取得します...")
+    print("🚀 APIからデータを取得して構造を検証します...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -129,6 +91,9 @@ def fetch_recent_races(start_date, end_date):
     cache_data = []
     current_date = start_date
     
+    # テストとして最初の1日・1レース目だけ詳細な構造をプリントするフラグ
+    debug_printed = False
+
     while current_date <= end_date:
         date_str = str(current_date)
         print(f"📅 取得中: {date_str}")
@@ -144,32 +109,29 @@ def fetch_recent_races(start_date, end_date):
             if not odds_info or not race_info or not result_info:
                 continue
             
+            # 最初の1回だけ、race_infoとboat1の中身をログに完全出力する
+            if not debug_printed:
+                print("\n🔍 【APIのデータ構造デバッグ】race_info のキー一覧:")
+                print(list(race_info.keys()))
+                print("🔍 【APIのデータ構造デバッグ】race_info['boat1'] の内容:")
+                print(race_info.get('boat1', 'boat1が存在しません'))
+                print("--------------------------------------------------\n")
+                debug_printed = True
+            
             actual_win = extract_trifecta_result(result_info)
             if not actual_win:
                 continue
 
-            # --- グレードと荒れフラグの算出 ---
             grade_str = str(race_info.get('grade', '一般'))
             grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
             grade_score = grade_map.get(grade_str, 1)
 
-            wind_speed = 0.0
-            try:
-                raw_wind_speed = race_info.get('wind_speed', 0.0)
-                wind_speed = safe_float(raw_wind_speed, 0.0)
-            except Exception:
-                wind_speed = 0.0
-
+            wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
             s_key = str(TARGET_JCD).zfill(2)
             trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
             is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
-            wind_dir = ""
-            try:
-                wind_dir = str(race_info.get('wind_direction', ''))
-            except Exception:
-                wind_dir = ""
-
+            wind_dir = str(race_info.get('wind_direction', ''))
             is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
             is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
 
@@ -190,20 +152,50 @@ def fetch_recent_races(start_date, end_date):
                     assigned_course = idx + 1
                     boat_key = f"boat{b}"
                     boat_data = race_info.get(boat_key, {})
-                    l3, st, cr, kim, mot, bot, rnk, exh, turn, water, in_rate, nat_w, nat_2 = get_factor_score(boat_data, assigned_course, TARGET_JCD)
-                    t_l3 += l3
-                    t_st += st
-                    t_cr += cr
-                    t_kim += kim
-                    t_mot += mot
-                    t_bot += bot
-                    t_rnk += rnk
-                    t_exh += exh
-                    t_turn += turn
-                    t_nat_win += nat_w
-                    t_nat_2nd += nat_2
-                    water_val = water
-                    in_rate_val = in_rate
+                    
+                    # 各種データの取得（キー名を仮で広くカバー）
+                    local_3ren = safe_float(boat_data.get('local_in3rd', boat_data.get('local_3ren', 0.0)), 0.0)
+                    ave_st = safe_float(boat_data.get('aveST', boat_data.get('st', 0.20)), 0.20)
+                    
+                    course_key = f"course_{assigned_course}_2nd_rate"
+                    course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
+                    
+                    motor_rate = safe_float(boat_data.get('motor_2nd_rate', boat_data.get('motor', 30.0)), 30.0)
+                    boat_rate = safe_float(boat_data.get('boat_2nd_rate', boat_data.get('boat', 30.0)), 30.0)
+                    
+                    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
+                    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
+                    
+                    rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
+                    rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
+                    racer_rank_score = rank_map.get(rank_str, 2.0)
+                    
+                    kimarite_type = boat_data.get('primary_kimarite', 'normal')
+                    if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
+                        kimarite_score = 45.0
+                    elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
+                        kimarite_score = 45.0
+                    elif kimarite_type == 'nige' and assigned_course == 1:
+                        kimarite_score = 50.0
+                    else:
+                        kimarite_score = 35.0
+
+                    exh_time = safe_float(boat_data.get('exhibition_time', boat_data.get('exh', 6.80)), 6.80)
+                    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
+                    
+                    t_l3 += local_3ren
+                    t_st += ave_st
+                    t_cr += course_record_score
+                    t_kim += kimarite_score
+                    t_mot += motor_rate
+                    t_bot += boat_rate
+                    t_rnk += racer_rank_score
+                    t_exh += exh_time
+                    t_turn += turn_time
+                    t_nat_win += national_win
+                    t_nat_2nd += national_2nd
+                    water_val = trait['water_type']
+                    in_rate_val = trait['in_rate']
                 
                 race_combos.append({
                     'combo': combo,
@@ -241,10 +233,10 @@ def fetch_recent_races(start_date, end_date):
     return cache_data
 
 def run_optimization(cache_data):
-    print("🤖 [3/5] 18特徴量最適化モデルの訓練を実行中（オッズ除外）...")
+    print("🤖 [3/5] モデル訓練を実行中...")
     
     dataset = []
-    for race_idx, race in enumerate(cache_data):
+    for race in cache_data:
         actual_win = race['actual_win']
         for bet in race['combos']:
             dataset.append({
@@ -275,14 +267,12 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
-    # ★ 全列の統計情報を省略なしで表示する設定を追加
-    print("\n📊 【全列の統計情報 (describe)】")
+    print("\n📊 【データの中身の確認 (describe)】")
     pd.set_option('display.max_columns', None)
     pd.set_option('display.width', 1000)
     print(df.describe())
     print("------------------------------------\n")
 
-    # 18特徴量リスト（oddsを完全に削除）
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
         'motor', 'boat', 'racer_rank', 
@@ -307,12 +297,9 @@ def run_optimization(cache_data):
     model.fit(X, y)
     
     model.booster_.save_model('model.txt')
-    print("✅ 学習完了: 18特徴量の最適化モデルを 'model.txt' として保存しました。")
+    print("✅ 学習完了: モデルを 'model.txt' として保存しました。")
 
-    # ==========================================
-    # 📊 特徴量重要度（Feature Importance）の表示
-    # ==========================================
-    print("\n📊 【18特徴量 重要度ランキング（Gainベース）】")
+    print("\n📊 【特徴量重要度ランキング（Gainベース）】")
     importance = model.booster_.feature_importance(importance_type='gain')
     importance_df = pd.DataFrame({
         'feature': features,
@@ -327,4 +314,4 @@ if __name__ == "__main__":
     
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
-    print("🚀 [5/5] 最適化パイプライン終了")
+    print("🚀 [5/5] パイプライン終了")
