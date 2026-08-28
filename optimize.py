@@ -275,6 +275,11 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
+    # ★ データの中身（統計情報）をログに出力して確認
+    print("\n📊 【データの中身の確認 (describe)】")
+    print(df.describe())
+    print("------------------------------------\n")
+
     # 18特徴量リスト（oddsを完全に削除）
     features = [
         'local_3ren', 'st', 'course', 'kimarite', 
@@ -303,7 +308,7 @@ def run_optimization(cache_data):
     print("✅ 学習完了: 18特徴量の最適化モデルを 'model.txt' として保存しました。")
 
     # ==========================================
-    # 📊 特徴量重要度（Feature Importance）の表示を追加
+    # 📊 特徴量重要度（Feature Importance）の表示
     # ==========================================
     print("\n📊 【18特徴量 重要度ランキング（Gainベース）】")
     importance = model.booster_.feature_importance(importance_type='gain')
@@ -321,4 +326,3 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] 最適化パイプライン終了")
-
