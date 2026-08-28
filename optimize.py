@@ -275,8 +275,10 @@ def run_optimization(cache_data):
         print("❌ 学習データが空です。")
         return
 
-    # ★ データの中身（統計情報）をログに出力して確認
-    print("\n📊 【データの中身の確認 (describe)】")
+    # ★ 全列の統計情報を省略なしで表示する設定を追加
+    print("\n📊 【全列の統計情報 (describe)】")
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.width', 1000)
     print(df.describe())
     print("------------------------------------\n")
 
