@@ -302,6 +302,18 @@ def run_optimization(cache_data):
     model.booster_.save_model('model.txt')
     print("✅ 学習完了: 18特徴量の最適化モデルを 'model.txt' として保存しました。")
 
+    # ==========================================
+    # 📊 特徴量重要度（Feature Importance）の表示を追加
+    # ==========================================
+    print("\n📊 【18特徴量 重要度ランキング（Gainベース）】")
+    importance = model.booster_.feature_importance(importance_type='gain')
+    importance_df = pd.DataFrame({
+        'feature': features,
+        'importance': importance
+    }).sort_values(by='importance', ascending=False)
+    print(importance_df.to_string(index=False))
+    print("--------------------------------------------------\n")
+
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
     start_d = end_d - timedelta(days=30)
@@ -309,3 +321,4 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] 最適化パイプライン終了")
+
