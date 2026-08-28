@@ -2,7 +2,7 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 最適化パイプライン開始（キー構造デバッグ版）")
+print("🚀 [1/5] 特徴量修正版・最適化パイプライン開始")
 
 import os
 from datetime import date, timedelta
@@ -81,7 +81,7 @@ def extract_trifecta_result(result_data):
     return None
 
 def fetch_recent_races(start_date, end_date):
-    print("🚀 APIからデータを取得して構造を検証します...")
+    print("🚀 APIからデータを取得中...")
     try:
         boatrace = PyJPBoatrace()
     except Exception as e:
@@ -91,9 +91,6 @@ def fetch_recent_races(start_date, end_date):
     cache_data = []
     current_date = start_date
     
-    # テストとして最初の1日・1レース目だけ詳細な構造をプリントするフラグ
-    debug_printed = False
-
     while current_date <= end_date:
         date_str = str(current_date)
         print(f"📅 取得中: {date_str}")
@@ -109,31 +106,24 @@ def fetch_recent_races(start_date, end_date):
             if not odds_info or not race_info or not result_info:
                 continue
             
-            # 最初の1回だけ、race_infoとboat1の中身をログに完全出力する
-            if not debug_printed:
-                print("\n🔍 【APIのデータ構造デバッグ】race_info のキー一覧:")
-                print(list(race_info.keys()))
-                print("🔍 【APIのデータ構造デバッグ】race_info['boat1'] の内容:")
-                print(race_info.get('boat1', 'boat1が存在しません'))
-                print("--------------------------------------------------\n")
-                debug_printed = True
-            
             actual_win = extract_trifecta_result(result_info)
             if not actual_win:
                 continue
 
-            grade_str = str(race_info.get('grade', '一般'))
+            # グレード情報の安全な取得
+            grade_str = str(race_info.get('grade', race_info.get('race_grade', '一般')))
             grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
             grade_score = grade_map.get(grade_str, 1)
 
-            wind_speed = safe_float(race_info.get('wind_speed', 0.0), 0.0)
+            # 風速・風向の安全な取得
+            wind_speed = safe_float(race_info.get('wind_speed', race_info.get('wind', 0.0)), 0.0)
             s_key = str(TARGET_JCD).zfill(2)
             trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
             is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
-            wind_dir = str(race_info.get('wind_direction', ''))
-            is_headwind = 1 if ('向' in wind_dir or '向かい風' in wind_dir) else 0
-            is_tailwind = 1 if ('追' in wind_dir or '追い風' in wind_dir) else 0
+            wind_dir = str(race_info.get('wind_direction', race_info.get('wind_dir', '')))
+            is_headwind = 1 if ('向' in wind_dir) else 0
+            is_tailwind = 1 if ('追' in wind_dir) else 0
 
             race_combos = []
             for combo, odds in odds_info.items():
@@ -146,31 +136,33 @@ def fetch_recent_races(start_date, end_date):
                 
                 t_l3, t_st, t_cr, t_kim, t_mot, t_bot, t_rnk, t_exh, t_turn = 0, 0, 0, 0, 0, 0, 0, 0, 0
                 t_nat_win, t_nat_2nd = 0, 0
-                water_val, in_rate_val = 0.5, 0.5
+                water_val, in_rate_val = trait['water_type'], trait['in_rate']
                 
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
-                    boat_key = f"boat{b}"
-                    boat_data = race_info.get(boat_key, {})
+                    # 選手のデータ格納キー（複数のパターンを許容）
+                    boat_data = race_info.get(f"boat{b}", race_info.get(b, {}))
+                    if not isinstance(boat_data, dict):
+                        boat_data = {}
                     
-                    # 各種データの取得（キー名を仮で広くカバー）
-                    local_3ren = safe_float(boat_data.get('local_in3rd', boat_data.get('local_3ren', 0.0)), 0.0)
+                    local_3ren = safe_float(boat_data.get('local_in3rd', boat_data.get('local_3ren', 30.0)), 30.0)
                     ave_st = safe_float(boat_data.get('aveST', boat_data.get('st', 0.20)), 0.20)
                     
-                    course_key = f"course_{assigned_course}_2nd_rate"
-                    course_record_score = safe_float(boat_data.get(course_key, 30.0), 30.0)
+                    # コース別2連対率などのキー
+                    course_rate = safe_float(boat_data.get(f"course_{assigned_course}_2nd_rate", boat_data.get('course_2nd_rate', 30.0)), 30.0)
                     
                     motor_rate = safe_float(boat_data.get('motor_2nd_rate', boat_data.get('motor', 30.0)), 30.0)
                     boat_rate = safe_float(boat_data.get('boat_2nd_rate', boat_data.get('boat', 30.0)), 30.0)
                     
-                    national_win = safe_float(boat_data.get('national_win_rate', 5.0), 5.0)
-                    national_2nd = safe_float(boat_data.get('national_2nd_rate', 30.0), 30.0)
+                    national_win = safe_float(boat_data.get('national_win_rate', boat_data.get('win_rate', 5.0)), 5.0)
+                    national_2nd = safe_float(boat_data.get('national_2nd_rate', boat_data.get('rate_2nd', 30.0)), 30.0)
                     
+                    # 級別（ランク）の取得
                     rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
                     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
                     racer_rank_score = rank_map.get(rank_str, 2.0)
                     
-                    kimarite_type = boat_data.get('primary_kimarite', 'normal')
+                    kimarite_type = str(boat_data.get('primary_kimarite', boat_data.get('kimarite', 'normal')))
                     if kimarite_type in ['makuri', 'tsuki_makuri'] and assigned_course in [4, 5, 6]:
                         kimarite_score = 45.0
                     elif kimarite_type == 'sashi' and assigned_course in [2, 3]:
@@ -180,12 +172,12 @@ def fetch_recent_races(start_date, end_date):
                     else:
                         kimarite_score = 35.0
 
-                    exh_time = safe_float(boat_data.get('exhibition_time', boat_data.get('exh', 6.80)), 6.80)
+                    exh_time = safe_float(boat_data.get('exhibition_time', boat_data.get('exh_time', 6.80)), 6.80)
                     turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
                     
                     t_l3 += local_3ren
                     t_st += ave_st
-                    t_cr += course_record_score
+                    t_cr += course_rate
                     t_kim += kimarite_score
                     t_mot += motor_rate
                     t_bot += boat_rate
@@ -194,8 +186,6 @@ def fetch_recent_races(start_date, end_date):
                     t_turn += turn_time
                     t_nat_win += national_win
                     t_nat_2nd += national_2nd
-                    water_val = trait['water_type']
-                    in_rate_val = trait['in_rate']
                 
                 race_combos.append({
                     'combo': combo,
@@ -278,7 +268,7 @@ def run_optimization(cache_data):
         'motor', 'boat', 'racer_rank', 
         'wind_speed', 'is_headwind', 'is_tailwind',
         'exh_time', 'turn_time', 'water_type', 'in_rate',
-        'national_win_rate', 'national_2nd_rate',
+        *['national_win_rate', 'national_2nd_rate'],
         'grade_score', 'is_rough_sign'
     ]
     
