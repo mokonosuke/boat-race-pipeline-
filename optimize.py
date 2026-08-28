@@ -2,14 +2,13 @@ import sys
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-print("🚀 [1/5] 特徴量修正版・最適化パイプライン開始")
+print("🚀 [1/5] 特徴量完全網羅版・最適化パイプライン開始")
 
 import os
 from datetime import date, timedelta
 import re
 import pandas as pd
 import lightgbm as lgb
-import requests
 
 try:
     from pyjpboatrace import PyJPBoatrace
@@ -99,6 +98,7 @@ def fetch_recent_races(start_date, end_date):
             try:
                 odds_info = boatrace.get_odds_trifecta(d=current_date, stadium=TARGET_JCD, race=rno)
                 race_info = boatrace.get_race_info(d=current_date, stadium=TARGET_JCD, race=rno)
+                just_before = boatrace.get_just_before_info(d=current_date, stadium=TARGET_JCD, race=rno)
                 result_info = boatrace.get_race_result(d=current_date, stadium=TARGET_JCD, race=rno)
             except Exception:
                 continue
@@ -115,13 +115,14 @@ def fetch_recent_races(start_date, end_date):
             grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
             grade_score = grade_map.get(grade_str, 1)
 
-            # 風速・風向の安全な取得
-            wind_speed = safe_float(race_info.get('wind_speed', race_info.get('wind', 0.0)), 0.0)
+            # 風速・風向の安全な取得（just_before も活用）
+            w_source = just_before if isinstance(just_before, dict) else race_info
+            wind_speed = safe_float(w_source.get('wind_speed', w_source.get('wind', 0.0)), 0.0)
             s_key = str(TARGET_JCD).zfill(2)
             trait = STADIUM_TRAITS.get(s_key, {'wind_limit_rough': 4.0})
             is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
-            wind_dir = str(race_info.get('wind_direction', race_info.get('wind_dir', '')))
+            wind_dir = str(w_source.get('wind_direction', w_source.get('wind_dir', '')))
             is_headwind = 1 if ('向' in wind_dir) else 0
             is_tailwind = 1 if ('追' in wind_dir) else 0
 
@@ -140,25 +141,41 @@ def fetch_recent_races(start_date, end_date):
                 
                 for idx, b in enumerate(boats):
                     assigned_course = idx + 1
-                    # 選手のデータ格納キー（複数のパターンを許容）
-                    boat_data = race_info.get(f"boat{b}", race_info.get(b, {}))
-                    if not isinstance(boat_data, dict):
-                        boat_data = {}
                     
-                    local_3ren = safe_float(boat_data.get('local_in3rd', boat_data.get('local_3ren', 30.0)), 30.0)
-                    ave_st = safe_float(boat_data.get('aveST', boat_data.get('st', 0.20)), 0.20)
+                    # 選手データの辞書を安全に特定（複数のキーパターンを完全網羅）
+                    boat_data = {}
+                    for key_candidate in [f"boat{b}", f"racer_{b}", str(b), b]:
+                        if key_candidate in race_info and isinstance(race_info[key_candidate], dict):
+                            boat_data = race_info[key_candidate]
+                            break
+                    if not boat_data and isinstance(race_info, dict):
+                        # リストや別の構造に入っている場合のフォールバック
+                        boat_data = race_info.get(f"boat{b}", {})
+
+                    # 直前情報（展示タイム等）の補完ソース
+                    jb_boat_data = {}
+                    if isinstance(just_before, dict):
+                        for key_candidate in [f"boat{b}", f"racer_{b}", str(b), b]:
+                            if key_candidate in just_before and isinstance(just_before[key_candidate], dict):
+                                jb_boat_data = just_before[key_candidate]
+                                break
+
+                    local_3ren = safe_float(boat_data.get('local_in3rd', boat_data.get('local_3ren', boat_data.get('local_rate', 33.0))), 33.0)
+                    ave_st = safe_float(boat_data.get('aveST', boat_data.get('st', boat_data.get('average_st', 0.18))), 0.18)
                     
-                    # コース別2連対率などのキー
-                    course_rate = safe_float(boat_data.get(f"course_{assigned_course}_2nd_rate", boat_data.get('course_2nd_rate', 30.0)), 30.0)
+                    # コース別2連対率（キーがなければ一般的な平均値からランダム性を付与しないようフォールバック）
+                    course_rate = safe_float(boat_data.get(f"course_{assigned_course}_2nd_rate", boat_data.get(f"c{assigned_course}_rate", boat_data.get('course_2nd_rate', 35.0))), 35.0)
                     
-                    motor_rate = safe_float(boat_data.get('motor_2nd_rate', boat_data.get('motor', 30.0)), 30.0)
-                    boat_rate = safe_float(boat_data.get('boat_2nd_rate', boat_data.get('boat', 30.0)), 30.0)
+                    motor_rate = safe_float(boat_data.get('motor_2nd_rate', boat_data.get('motor', boat_data.get('motor_rate', 35.0))), 35.0)
+                    boat_rate = safe_float(boat_data.get('boat_2nd_rate', boat_data.get('boat', boat_data.get('boat_rate', 35.0))), 35.0)
                     
-                    national_win = safe_float(boat_data.get('national_win_rate', boat_data.get('win_rate', 5.0)), 5.0)
-                    national_2nd = safe_float(boat_data.get('national_2nd_rate', boat_data.get('rate_2nd', 30.0)), 30.0)
+                    national_win = safe_float(boat_data.get('national_win_rate', boat_data.get('win_rate', boat_data.get('zenkoku_win', 5.0))), 5.0)
+                    national_2nd = safe_float(boat_data.get('national_2nd_rate', boat_data.get('rate_2nd', boat_data.get('zenkoku_2nd', 35.0))), 35.0)
                     
-                    # 級別（ランク）の取得
-                    rank_str = str(boat_data.get('racer_class', boat_data.get('rank', 'B1'))).upper()
+                    # 級別の抽出（文字列からA1〜B2を正規表現で確実に判定）
+                    rank_raw = str(boat_data.get('racer_class', boat_data.get('rank', boat_data.get('class', 'B1'))))
+                    rank_match = re.search(r'(A[12]|B[12])', rank_raw.upper())
+                    rank_str = rank_match.group(1) if rank_match else 'B1'
                     rank_map = {'A1': 4.0, 'A2': 3.0, 'B1': 2.0, 'B2': 1.0}
                     racer_rank_score = rank_map.get(rank_str, 2.0)
                     
@@ -172,8 +189,9 @@ def fetch_recent_races(start_date, end_date):
                     else:
                         kimarite_score = 35.0
 
-                    exh_time = safe_float(boat_data.get('exhibition_time', boat_data.get('exh_time', 6.80)), 6.80)
-                    turn_time = safe_float(boat_data.get('turn_time', 6.80), 6.80)
+                    # 展示タイム・回り足（直前情報があれば優先）
+                    exh_time = safe_float(jb_boat_data.get('exhibition_time', jb_boat_data.get('exh_time', boat_data.get('exhibition_time', boat_data.get('exh_time', 6.75)))), 6.75)
+                    turn_time = safe_float(jb_boat_data.get('turn_time', boat_data.get('turn_time', 6.75)), 6.75)
                     
                     t_l3 += local_3ren
                     t_st += ave_st
@@ -268,7 +286,7 @@ def run_optimization(cache_data):
         'motor', 'boat', 'racer_rank', 
         'wind_speed', 'is_headwind', 'is_tailwind',
         'exh_time', 'turn_time', 'water_type', 'in_rate',
-        *['national_win_rate', 'national_2nd_rate'],
+        'national_win_rate', 'national_2nd_rate',
         'grade_score', 'is_rough_sign'
     ]
     
@@ -305,3 +323,4 @@ if __name__ == "__main__":
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] パイプライン終了")
+
