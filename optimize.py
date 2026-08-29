@@ -92,7 +92,6 @@ def fetch_recent_races(start_date, end_date):
         date_str = str(current_date)
         print(f"📅 取得中: {date_str} (全24場)")
         
-        # 全24場をループ
         for stadium in range(1, 25):
             s_key = str(stadium).zfill(2)
             trait = STADIUM_TRAITS.get(s_key, {'water_type': 1.0, 'in_rate': 0.50, 'wind_limit_rough': 4.0})
@@ -309,8 +308,9 @@ def run_optimization(cache_data):
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
-    start_d = end_d - timedelta(days=14)  # 全場の場合はデータ量が多くなるため直近14日間に設定
+    start_d = end_d - timedelta(days=3)  # 全場対応のため直近3日間に設定（タイムアウト防止）
     
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
     print("🚀 [5/5] パイプライン終了")
+
