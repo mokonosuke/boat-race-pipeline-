@@ -121,8 +121,12 @@ def fetch_recent_races(start_date, end_date):
                 is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
                 wind_dir = str(w_source.get('wind_direction', w_source.get('wind_dir', '')))
-                is_headwind = 1 if ('向' in wind_dir) else 0
-                is_tailwind = 1 if ('追' in wind_dir) else 0
+                
+                # 🔍 デバッグ用ログ出力
+                print(f"DEBUG -> 開催グレード: {grade_str} (score:{grade_score}), 風向文字列: '{wind_dir}', 風速: {wind_speed}")
+
+                is_headwind = 1 if ('向' in wind_dir or 'head' in wind_dir.lower()) else 0
+                is_tailwind = 1 if ('追' in wind_dir or 'tail' in wind_dir.lower()) else 0
 
                 race_combos = []
                 for combo, odds in odds_info.items():
