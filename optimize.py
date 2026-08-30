@@ -116,14 +116,15 @@ def fetch_recent_races(start_date, end_date):
                 grade_map = {'一般': 1, 'G3': 2, 'G2': 3, 'G1': 4, 'SG': 5}
                 grade_score = grade_map.get(grade_str, 1)
 
-                w_source = just_before if isinstance(just_before, dict) else race_info
-                wind_speed = safe_float(w_source.get('wind_speed', w_source.get('wind', 2.0)), 2.0)
+                # 💡 風速・風向を just_before と race_info の両方から幅広く探索する
+                w_source = just_before if isinstance(just_before, dict) else {}
+                wind_speed = safe_float(w_source.get('wind_speed', w_source.get('wind', race_info.get('wind_speed', race_info.get('wind', 2.0)))), 2.0)
                 is_rough_sign = 1 if wind_speed >= trait.get('wind_limit_rough', 4.0) else 0
 
-                wind_dir = str(w_source.get('wind_direction', w_source.get('wind_dir', '')))
+                wind_dir = str(w_source.get('wind_direction', w_source.get('wind_dir', race_info.get('wind_direction', race_info.get('wind_dir', '')))))
                 
-                # 🔍 デバッグ用ログ出力
-                print(f"DEBUG -> 開催グレード: {grade_str} (score:{grade_score}), 風向文字列: '{wind_dir}', 風速: {wind_speed}")
+                # デバッグ用ログ出力（値が取れているか確認）
+                print(f"DEBUG -> 場:{stadium} R{rno} | 風速:{wind_speed} 風向:'{wind_dir}'")
 
                 is_headwind = 1 if ('向' in wind_dir or 'head' in wind_dir.lower()) else 0
                 is_tailwind = 1 if ('追' in wind_dir or 'tail' in wind_dir.lower()) else 0
@@ -312,7 +313,7 @@ def run_optimization(cache_data):
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
-    start_d = end_d - timedelta(days=1)  # まずは昨日1日分だけで全場テスト
+    start_d = end_d - timedelta(days=1)  # まずは昨日1日分だけでテスト
     
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
