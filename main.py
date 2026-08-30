@@ -222,20 +222,23 @@ def fetch_recent_races(start_date, end_date):
 def main():
     print("=== 学習パイプライン開始（データ蓄積 & LambdaRank版） ===")
     
-    # 1. 常に「昨日」の1日分を取得
     target_date = date.today() - timedelta(days=1)
     new_records = fetch_recent_races(target_date, target_date)
     new_df = pd.DataFrame(new_records)
     
     csv_path = "dataset.csv"
     
-    # 2. 既存のCSVデータと結合して蓄積
+    # 既存のCSV読み込み（構造が違う場合は安全に新規作成する）
     if os.path.exists(csv_path):
-        existing_df = pd.read_csv(csv_path)
-        if len(new_df) > 0:
-            df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['date', 'stadium', 'rno', 'combo']).reset_index(drop=True)
-        else:
-            df = existing_df
+        try:
+            existing_df = pd.read_csv(csv_path)
+            if len(new_df) > 0:
+                df = pd.concat([existing_df, new_df]).drop_duplicates(subset=['date', 'stadium', 'rno', 'combo']).reset_index(drop=True)
+            else:
+                df = existing_df
+        except Exception:
+            print("⚠️ 既存CSVの読み込みに失敗したため、新規作成します。")
+            df = new_df
     else:
         df = new_df
         
@@ -243,18 +246,15 @@ def main():
         print("❌ 学習データが空です。処理を終了します。")
         return
 
-    # 蓄積したCSVを更新保存
     df.to_csv(csv_path, index=False)
     print(f"💾 累計データセット保存完了: 総行数 {len(df)} 行")
 
-    # 3. 順位学習（LambdaRank）のためのグループ作成
     df = df.sort_values(by=['date', 'stadium', 'rno']).reset_index(drop=True)
     group = df.groupby(['date', 'stadium', 'rno'], sort=False).size().values
 
     X_train = df[FEATURES]
     y_train = df['target']
     
-    # 4. モデルの構築と学習
     model = lgb.LGBMRanker(
         objective="lambdarank",
         metric="ndcg",
@@ -272,3 +272,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
