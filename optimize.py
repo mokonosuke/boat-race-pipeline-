@@ -285,7 +285,7 @@ def run_optimization(cache_data):
     
     model = lgb.LGBMClassifier(
         n_estimators=300,
-        max_depth,
+        max_depth=6,
         learning_rate=0.01,
         subsample=0.8,
         colsample_bytree=0.8,
@@ -308,7 +308,7 @@ def run_optimization(cache_data):
 
 if __name__ == "__main__":
     end_d = date.today() - timedelta(days=1)
-    start_d = end_d - timedelta(days=1)  # 【超高速化】まずは昨日1日分だけで全場をテスト
+    start_d = end_d - timedelta(days=1)  # まずは昨日1日分だけで全場テスト
     
     cache_data = fetch_recent_races(start_d, end_d)
     run_optimization(cache_data)
