@@ -1,8 +1,16 @@
 import sys
+import os
+
+# scikit-learnがなければ自動でインストールする
+try:
+    import sklearn
+except ImportError:
+    print("📦 scikit-learnをインストールしています...")
+    os.system(f"{sys.executable} -m pip install scikit-learn")
+
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(line_buffering=True)
 
-import os
 from datetime import date, timedelta
 import re
 import pandas as pd
@@ -228,7 +236,6 @@ def main():
     
     csv_path = "dataset.csv"
     
-    # 既存のCSV読み込み（構造が違う場合は安全に新規作成する）
     if os.path.exists(csv_path):
         try:
             existing_df = pd.read_csv(csv_path)
@@ -272,3 +279,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
