@@ -1,7 +1,7 @@
 import sys
 import os
 
-# scikit-learnがなければ自動でインストールする
+# scikit-learnの自動チェック＆インストール
 try:
     import sklearn
 except ImportError:
@@ -244,7 +244,7 @@ def main():
             else:
                 df = existing_df
         except Exception:
-            print("⚠️ 既存CSVの読み込みに失敗したため、新規作成します。")
+            print("⚠️ 既存CSVの破損を検知したため新規作成します。")
             df = new_df
     else:
         df = new_df
