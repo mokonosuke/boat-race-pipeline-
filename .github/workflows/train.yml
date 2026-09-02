@@ -29,17 +29,14 @@ jobs:
         run: |
           python optimize.py
 
-      - name: Pull latest changes before commit
+      - name: Commit and push model and dataset
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase || echo "Rebase skipped"
-
-      - name: Commit and push model
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: "Auto-update model file"
-          file_pattern: 'model.txt'
+          git add model.txt dataset.csv
+          git commit -m "Auto-update model and dataset [skip ci]" || exit 0
+          git pull --rebase origin main
+          git push origin main
 
       - name: Send Discord Notification
         env:
