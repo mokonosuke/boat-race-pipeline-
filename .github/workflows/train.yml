@@ -35,8 +35,8 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add model.txt
           git commit -m "Auto-update model.txt [skip ci]" || exit 0
-          git pull --rebase origin main
-          git push origin main
+          git pull origin main --rebase || (git checkout --ours model.txt && git add model.txt && git rebase --continue)
+          git origin main || git push origin main --force
 
       - name: Send Discord Notification
         env:
